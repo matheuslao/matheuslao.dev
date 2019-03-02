@@ -1,0 +1,4 @@
+baseURL = "https://matheuslao.dev"
+languageCode = "pt-br"
+title = "matheuslao.dev"
+theme = "hermit"
