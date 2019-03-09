@@ -1,4 +1,4 @@
-baseURL = "matheuslao.dev"
+baseURL = "https://matheuslao.dev"
 languageCode = "en"
 title = "matheuslao.dev"
 theme = "hermit"
