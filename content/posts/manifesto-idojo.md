@@ -1,7 +1,7 @@
 ---
 title: "Manifesto iDojo"
 date: 2019-03-09T17:42:47-03:00
-draft: true
+draft: false
 toc: false
 images:
 tags:
