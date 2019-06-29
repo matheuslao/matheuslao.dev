@@ -1,79 +1,72 @@
-baseURL = "https://matheuslao.dev"
+## Basic Configuration
+baseurl = "https://matheuslao.dev"
 languageCode = "en"
-title = "matheuslao.dev"
-theme = "hermit"
 
-defaultContentLanguage = "en"
+title = "matheus dev"
+theme = "hyde-hyde"
 
-# enableGitInfo = true
-pygmentsCodefences  = true
-pygmentsUseClasses  = true
-# hasCJKLanguage = true  # If Chinese/Japanese/Korean is your main content language, enable this to make wordCount works right.
-rssLimit = 10  # Maximum number of items in the RSS feed.
-copyright = "This work is licensed under a Creative Commons Attribution-NonCommercial 4.0 International License." # This message is only used by the RSS template.
-enableEmoji = true  # Shorthand emojis in content files - https://gohugo.io/functions/emojify/
-googleAnalytics = "UA-135465745-1"
+## Hugo Built-in Features
 disqusShortname = "matheuslao"
+googleAnalytics = "UA-135465745-1"
+# enableRobotsTXT = true
 
+# summarylength = 30
 
-[author]
-  name = "Matheus Andrade"
+#paginate = 5
 
-[blackfriday]
-  # hrefTargetBlank = true
-  # noreferrerLinks = true
-  # nofollowLinks = true
-
-[taxonomies]
-  tag = "tags"
-  # Categories are disabled by default.
-
+## Site Settings
 [params]
-  dateform        = "2 Jan de 2006"
-  dateformShort   = "2 Jan"
-  dateformNum     = "02-01-2006"
-  dateformNumTime = "02-01-2006 15:04 -0700"
+    author = "Matheus Andrade"
+    title = "Title"
+    # description = "..."
+    authorimage = "/img/matheuslao.jpg"
+    dateformat = "Jan 2, 2006"
 
-  # Metadata mostly used in document's head
-  # description = ""
-  # images = [""]
-  themeColor = "#ff0000"
+    # sidebar, copyright & license
+    copyright = "htr3n"
+    license = "CC BY-SA 4.0"
+    licenseURL = "https://creativecommons.org/licenses/by-sa/4.0"
+    showBuiltWith = true
 
-  homeSubtitle = "Blog de Matheus Andrade."
-  footerCopyright = ' &#183; <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a>'
-  # bgImg = ""  # Homepage background-image URL
+    # https://highlightjs.org
+    highlightjs = true
+    highlightjsstyle = "github"
+    
+    # please choose either GraphComment or Disqus or Utterances
+    #GraphCommentId = "..."
+    #UtterancesRepo = "..." # https://utteranc.es/
+    #UtterancesIssueTerm = "..." # pathname, url, title, og:title
+    #UtterancesTheme = "..." # github-light or github-dark
 
-  # Prefix of link to the git commit detail page. GitInfo must be enabled.
-  # gitUrl = "https://github.com/username/repository/commit/"
+    # Table of contents
+    #toc = none, "hugo", or "tocbot"
 
-  # Toggling this option needs to rebuild SCSS, requires Hugo extended version
-  justifyContent = true  # Set "text-align: justify" to `.content`.
+## Social Accounts
+[params.social]
+    github = "matheuslao"
+    instagram = "matheuslao"
+    #xing = "<username>"
+    #linkedin = "<username>"
+    twitter = "matheuslao"
+    facebook = "matheuslao"
+    #stackoverflow = "<username>"
+    telegram = "matheuslao"
+    email = "matheuswcf@gmail.com"
+    # gravatar = "your-email@example.com"
 
-  # Add custom css
-  # customCSS = ["css/foo.css", "css/bar.css"]
-
-  # Social Icons
-  # Check https://github.com/Track3/hermit#social-icons for more info.
-  [[params.social]]
-    name = "twitter"
-    url = "https://twitter.com/matheuslao"
-
-  [[params.social]]
-    name = "instagram"
-    url = "https://instagram.com/matheuslao"
-
-  [[params.social]]
-    name = "github"
-    url = "https://github.com/matheuslao"
-
-[menu]
-
-  [[menu.main]]
-    name = "Posts"
-    url = "posts/"
-    weight = 10
-
-  [[menu.main]]
-    name = "About"
-    url = "about-me/"
-    weight = 20
+## Main Menu
+#[[menu.main]]
+#    name = "Posts"
+#    weight = 100
+#    identifier = "posts"
+#    url = "/posts/"
+#[[menu.main]]
+#    name = "Portfolio"
+#    identifier = "portfolio"
+#    weight = 200
+#    url = "/portfolio/"
+#[[menu.main]]
+#    name = "About"
+#    identifier = "about"
+#    weight = 300
+#    url = "/about/"
