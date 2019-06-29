@@ -19,7 +19,7 @@ googleAnalytics = "UA-135465745-1"
     author = "Matheus Andrade"
     title = "matheuslao.dev"
     # description = "..."
-    authorimage = "https://pbs.twimg.com/profile_images/1044702423774892034/8desk_KH_400x400.jpg"
+    authorimage = "/img/matheuslao.jpg"
     dateformat = "Jan 2, 2006"
 
     # sidebar, copyright & license
@@ -52,7 +52,7 @@ googleAnalytics = "UA-135465745-1"
     #stackoverflow = "<username>"
     telegram = "matheuslao"
     email = "matheuswcf@gmail.com"
-    # gravatar = "your-email@example.com"
+    gravatar = "matheuswcf@gmail.com"
 
 ## Main Menu
 [[menu.main]]
