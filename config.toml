@@ -19,7 +19,7 @@ googleAnalytics = "UA-135465745-1"
     author = "Matheus Andrade"
     title = "matheuslao.dev"
     # description = "..."
-    authorimage = "//img/matheuslao.jpg"
+    authorimage = "https://pbs.twimg.com/profile_images/1044702423774892034/8desk_KH_400x400.jpg"
     dateformat = "Jan 2, 2006"
 
     # sidebar, copyright & license
