@@ -17,7 +17,7 @@ googleAnalytics = "UA-135465745-1"
 ## Site Settings
 [params]
     author = "Matheus Andrade"
-    title = "Title"
+    title = "matheuslao.dev"
     # description = "..."
     authorimage = "/img/matheuslao.jpg"
     dateformat = "Jan 2, 2006"
@@ -55,11 +55,11 @@ googleAnalytics = "UA-135465745-1"
     # gravatar = "your-email@example.com"
 
 ## Main Menu
-#[[menu.main]]
-#    name = "Posts"
-#    weight = 100
-#    identifier = "posts"
-#    url = "/posts/"
+[[menu.main]]
+    name = "Posts"
+    weight = 100
+    identifier = "posts"
+    url = "/posts/"
 #[[menu.main]]
 #    name = "Portfolio"
 #    identifier = "portfolio"
