@@ -67,6 +67,7 @@ Se salvou o arquivo com o nome de `registry.yml`, suba seu stack com um comando 
 $ docker stack deploy -c registry.yml registry
 ```
 
+E depois configure seus repositórios docker (hosted, proxy, group) de acordo com as regras inseridas no traefik.
 
 ## Qual o Objetivo?
 
@@ -143,6 +144,12 @@ A necessidade de 2 regras (identificando o tipo de requisição) para o Registry
 
 - quando precisarmos baixar uma imagem, a requisição irá para um repositório que contem as imagens privadas construídas + acesso ao Docker Hub através de um proxy (repositório este disponível pelo *HTTP Connector* 8082).
 
+Se salvou o arquivo com o nome de `registry.yml`, suba seu stack com um comando como este:
+
+```
+$ docker stack deploy -c registry.yml registry
+```
+
 
 ## Configurandos os Repositórios no Nexus
 
@@ -188,6 +195,12 @@ Par baixar uma imagem do Docker Hub (hello-world, por exemplo) pelo seu Registry
 
 ```
 $ docker pull registry.domain.com/hello-world
+```
+
+E para pushar uma imagem para seu repositório privado, após ter gerado a tag, faça:
+
+```
+$ docker push registry.domain.com/minha-image:versao
 ```
 
 Bem legal!
