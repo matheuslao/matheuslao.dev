@@ -24,12 +24,12 @@ Irei exemplificar com a instalação do Ubuntu.
 A instalação é simples como manda a documentação oficial. Acessando a **Microsoft Store** a partir de seu computador, pesquise por Ubuntu, escolha a versão e apenas clique em **Obter**:
 
 
-![instalando-ubuntu-store](https://raw.githubusercontent.com/matheuslao/matheuslao.dev/drafts/static/img/personalizando-local-instalacao-distro-linux-wsl2/01.png)
+![instalando-ubuntu-store](https://raw.githubusercontent.com/matheuslao/matheuslao.dev/main/static/img/personalizando-local-instalacao-distro-linux-wsl2/01.png)
 
 
 Após o download, ainda na mesma janela do produto na Microsoft Store, clique em **Iniciar** para a instalação e configuração inicial do sistema, com a criação do usuário:
 
-![iniciando-ubuntu-store](https://raw.githubusercontent.com/matheuslao/matheuslao.dev/drafts/static/img/personalizando-local-instalacao-distro-linux-wsl2/02.png)
+![iniciando-ubuntu-store](https://raw.githubusercontent.com/matheuslao/matheuslao.dev/main/static/img/personalizando-local-instalacao-distro-linux-wsl2/02.png)
 
 Após a criação do usuário, você já possui o Ubuntu instalado. Feche a Microsoft Store e deslogue-se do Ubuntu (um *exit* no terminal, por exemplo).
 
@@ -40,7 +40,7 @@ Em um terminal Windows com acesso ao utilitário **wsl**, verifique que a instal
 wsl -l -v
 ```
 
-![ubuntu-instalado](https://raw.githubusercontent.com/matheuslao/matheuslao.dev/drafts/static/img/personalizando-local-instalacao-distro-linux-wsl2/03.png)
+![ubuntu-instalado](https://raw.githubusercontent.com/matheuslao/matheuslao.dev/main/static/img/personalizando-local-instalacao-distro-linux-wsl2/03.png)
 
 
 ## Desfazendo o Registro do Ubuntu e exportando disco
@@ -63,7 +63,7 @@ Agora, descadastre a distribuição do WSL:
 wsl --unregister Ubuntu-20.04
 ```
 
-![ubuntu-descadastrado-disco-exportado](https://raw.githubusercontent.com/matheuslao/matheuslao.dev/drafts/static/img/personalizando-local-instalacao-distro-linux-wsl2/04.png)
+![ubuntu-descadastrado-disco-exportado](https://raw.githubusercontent.com/matheuslao/matheuslao.dev/main/static/img/personalizando-local-instalacao-distro-linux-wsl2/04.png)
 
 
 ## Fazendo um novo Registro no WSL a partir do disco exportado
@@ -74,11 +74,11 @@ Importe no WSL o disco exportado anteriormente, definindo um novo nome para a Di
 wsl --import ubuntu D:\virtual_machines\WSL2\ubuntu d:\foo.tar
 ```
 
-![novo-ubuntu-importado-a-partir-do-disco](https://raw.githubusercontent.com/matheuslao/matheuslao.dev/drafts/static/img/personalizando-local-instalacao-distro-linux-wsl2/05.png)
+![novo-ubuntu-importado-a-partir-do-disco](https://raw.githubusercontent.com/matheuslao/matheuslao.dev/main/static/img/personalizando-local-instalacao-distro-linux-wsl2/05.png)
 
 Verifique que o disco está no lugar que queremos:
 
-![windows-explorer-novo-local](https://raw.githubusercontent.com/matheuslao/matheuslao.dev/drafts/static/img/personalizando-local-instalacao-distro-linux-wsl2/06.png)
+![windows-explorer-novo-local](https://raw.githubusercontent.com/matheuslao/matheuslao.dev/main/static/img/personalizando-local-instalacao-distro-linux-wsl2/06.png)
 
 
 
