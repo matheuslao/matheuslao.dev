@@ -1,5 +1,5 @@
 ---
-title: "Dicas: Credenciais X Imagens Docker"
+title: "06 Exemplos de Uso de Credenciais (04 não recomendadas) durante o Build de Imagens Docker"
 date: 2020-12-23T12:30:18-03:00
 draft: false
 images:
