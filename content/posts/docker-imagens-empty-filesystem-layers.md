@@ -322,7 +322,7 @@ d1ba00e0a9d5   About a minute ago   /bin/sh -c #(nop)  LABEL mantainer=matheusla
 <missing>      2 weeks ago          /bin/sh -c #(nop) ADD file:ec475c2abb2d46435…   5.58MB
 ```
 
-É fácil visualizar a presença de 16 layers, concorda? Também não é dificíl dizer que as 2 primeiras layers (de baixo pra cima) são as layers da imagem base alpine. Assim, temos 14 layers registradas adicionalmente (ordenadas e empilhadas conforme instruções) que batem com os 14 steps que geraram-as.
+É fácil visualizar a presença de 15 layers, concorda? Também não é dificíl dizer que as 2 primeiras layers (de baixo pra cima) são as layers da imagem base alpine. Assim, temos 13 layers registradas adicionalmente (ordenadas e empilhadas conforme instruções) que batem com os 13 steps (depois do FROM) que geraram-as.
 
 Analisemos agora o tamanho das *layers*. Baseado na experiência anterior, afirmaríamos que 05 são **FS Layers**, pois possuem tamanho > 0.
 
