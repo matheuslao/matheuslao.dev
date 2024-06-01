@@ -1,9 +1,8 @@
 ---
+layout: post
 title: "Personalizando o Local de Instalação do Linux no WSL2"
 date: 2020-10-08T22:18:03-03:00
-draft: false
-images:
-tags:
+categories:
   - linux
   - ubuntu
   - WSL2

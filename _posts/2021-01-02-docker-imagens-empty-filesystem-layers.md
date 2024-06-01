@@ -1,9 +1,8 @@
 ---
+layout: post
 title: "Docker Images, Empty Layers e FileSystem Layers"
 date: 2021-01-02T11:50:10-03:00
-draft: false
-images:
-tags:
+categories:
   - docker
   - dockerfile
   - build
@@ -13,9 +12,7 @@ tags:
   - fs layers
 ---
 
-Saudações!
-
-Containers não são mais novidades. Hoje, Devs e Ops lidam diariamente com aplicações containerizadas e são responsáveis pela construção da imagem da aplicação a ser implantada em produção.
+Saudações! Containers não são mais novidades. Hoje, Devs e Ops lidam diariamente com aplicações containerizadas e são responsáveis pela construção da imagem da aplicação a ser implantada em produção.
 
 Mas, **como anda o processo de construção das imagens das aplicações de sua empresa**? Todos os membros do time compreendem o que acontece no *building* de uma imagem? Há uma busca por otimizações em reaproveitamento, consumo de espaço em disco, processos de atualização das imagens de todos os apps?
 

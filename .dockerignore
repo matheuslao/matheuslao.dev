@@ -1,0 +1,4 @@
+.jekyll-cache
+Dockerfile
+docker-compose.yaml
+_site/*

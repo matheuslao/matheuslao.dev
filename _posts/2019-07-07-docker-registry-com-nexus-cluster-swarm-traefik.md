@@ -1,9 +1,8 @@
 ---
+layout: post
 title: "Docker Registry com Nexus em um Cluster Swarm + Traefik + NFS"
 date: 2019-07-07T14:50:17-03:00
-draft: false 
-images:
-tags:
+categories:
   - docker
   - nexus
   - traefik

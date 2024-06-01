@@ -1,10 +1,8 @@
 ---
+layout: post
 title: "Manifesto iDojo"
 date: 2019-03-09T17:42:47-03:00
-draft: false
-toc: false
-images:
-tags:
+categories:
   - idojo
   - empreender
   - startup  

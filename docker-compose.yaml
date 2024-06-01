@@ -1,0 +1,10 @@
+
+services:
+  jekyll:
+    image: matheuslao:snapshot
+    build: .
+    command: jekyll serve --watch --force_polling --verbose --livereload -H 0.0.0.0
+    ports:
+      - 4000:4000
+    volumes:
+      - .:/srv/blog
