@@ -1,13 +1,13 @@
 ---
+layout: post
 title: "06 Exemplos de Uso de Credenciais (04 não recomendadas) durante o Build de Imagens Docker"
 date: 2020-12-23T12:30:18-03:00
-draft: false
-images:
-tags:
+categories:
   - docker
   - dockerfile
   - multistage build
 ---
+
 
 Em quase todo o processo de construção de imagens Docker, há a necessidade de baixar artefatos (ex: zip, war, jar, etc.) de alguma URL para compor a imagem de nossa aplicação. Por vezes, estas URLs exigem autenticação e precisamos de credenciais para ter acesso ao conteúdo.
 

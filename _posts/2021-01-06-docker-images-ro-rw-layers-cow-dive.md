@@ -1,9 +1,8 @@
 ---
+layout: post
 title: "Docker Images, Read-Only/Writable Layers, CoW e Dive"
 date: 2021-01-06T12:00:10-03:00
-draft: false
-images:
-tags:
+categories:
   - docker
   - dockerfile
   - build
@@ -13,9 +12,7 @@ tags:
   - dive
 ---
 
-Saudações!
-
-No [post anterior](https://matheuslao.dev/posts/docker-imagens-empty-filesystem-layers/) vimos a definição de imagens, além da conceituação de *layers* e como estas são intrínsecas ao assunto. Entendemos também a existência de *filesystem layers*, assim como *empty layers* no processo de formação de uma imagem, a partir de instruções (nem todas geram layers) de um *Dockerfile*.
+Saudações! No [post anterior](https://matheuslao.dev/posts/docker-imagens-empty-filesystem-layers/) vimos a definição de imagens, além da conceituação de *layers* e como estas são intrínsecas ao assunto. Entendemos também a existência de *filesystem layers*, assim como *empty layers* no processo de formação de uma imagem, a partir de instruções (nem todas geram layers) de um *Dockerfile*.
 
 O objetivo deste post é continuar dissecando o tema, com alguns estudos/experimentações que nos permitam entender mais como imagens Docker funcionam e são construídas.
 
