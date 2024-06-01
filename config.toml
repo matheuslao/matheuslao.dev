@@ -1,0 +1,72 @@
+## Basic Configuration
+baseurl = "https://matheuslao.dev"
+languageCode = "en"
+
+title = "matheus dev"
+theme = "hyde-hyde"
+
+## Hugo Built-in Features
+disqusShortname = "matheuslao"
+googleAnalytics = "UA-135465745-1"
+# enableRobotsTXT = true
+
+# summarylength = 30
+
+#paginate = 5
+
+## Site Settings
+[params]
+    author = "Matheus Andrade"
+    title = "matheuslao.dev"
+    # description = "..."
+    authorimage = "/img/matheuslao.jpg"
+    dateformat = "Jan 2, 2006"
+
+    # sidebar, copyright & license
+    copyright = "htr3n"
+    license = "CC BY-SA 4.0"
+    licenseURL = "https://creativecommons.org/licenses/by-sa/4.0"
+    showBuiltWith = true
+
+    # https://highlightjs.org
+    highlightjs = true
+    highlightjsstyle = "github"
+    
+    # please choose either GraphComment or Disqus or Utterances
+    #GraphCommentId = "..."
+    #UtterancesRepo = "..." # https://utteranc.es/
+    #UtterancesIssueTerm = "..." # pathname, url, title, og:title
+    #UtterancesTheme = "..." # github-light or github-dark
+
+    # Table of contents
+    #toc = none, "hugo", or "tocbot"
+
+## Social Accounts
+[params.social]
+    github = "matheuslao"
+    instagram = "matheuslao"
+    #xing = "<username>"
+    #linkedin = "<username>"
+    twitter = "matheuslao"
+    facebook = "matheuslao"
+    #stackoverflow = "<username>"
+    telegram = "matheuslao"
+    email = "matheuswcf@gmail.com"
+    gravatar = "matheuswcf@gmail.com"
+
+## Main Menu
+[[menu.main]]
+    name = "Posts"
+    weight = 100
+    identifier = "posts"
+    url = "/posts/"
+#[[menu.main]]
+#    name = "Portfolio"
+#    identifier = "portfolio"
+#    weight = 200
+#    url = "/portfolio/"
+#[[menu.main]]
+#    name = "About"
+#    identifier = "about"
+#    weight = 300
+#    url = "/about/"
