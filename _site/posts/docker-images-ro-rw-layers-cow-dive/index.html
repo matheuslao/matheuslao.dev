@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="">
+
+<head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="ie=edge">
+<link href="https://fonts.googleapis.com/css?family=Merriweather:300|Raleway:400,700" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/style.css">
+<title>Docker Images, Read-Only/Writable Layers, CoW e Dive</title>
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Docker Images, Read-Only/Writable Layers, CoW e Dive | matheuslao.dev</title>
+<meta name="generator" content="Jekyll v4.3.3" />
+<meta property="og:title" content="Docker Images, Read-Only/Writable Layers, CoW e Dive" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Saudações! No post anterior vimos a definição de imagens, além da conceituação de layers e como estas são intrínsecas ao assunto. Entendemos também a existência de filesystem layers, assim como empty layers no processo de formação de uma imagem, a partir de instruções (nem todas geram layers) de um Dockerfile." />
+<meta property="og:description" content="Saudações! No post anterior vimos a definição de imagens, além da conceituação de layers e como estas são intrínsecas ao assunto. Entendemos também a existência de filesystem layers, assim como empty layers no processo de formação de uma imagem, a partir de instruções (nem todas geram layers) de um Dockerfile." />
+<link rel="canonical" href="http://0.0.0.0:4000/posts/docker-images-ro-rw-layers-cow-dive/" />
+<meta property="og:url" content="http://0.0.0.0:4000/posts/docker-images-ro-rw-layers-cow-dive/" />
+<meta property="og:site_name" content="matheuslao.dev" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2021-01-06T15:00:10+00:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Docker Images, Read-Only/Writable Layers, CoW e Dive" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","dateModified":"2021-01-06T15:00:10+00:00","datePublished":"2021-01-06T15:00:10+00:00","description":"Saudações! No post anterior vimos a definição de imagens, além da conceituação de layers e como estas são intrínsecas ao assunto. Entendemos também a existência de filesystem layers, assim como empty layers no processo de formação de uma imagem, a partir de instruções (nem todas geram layers) de um Dockerfile.","headline":"Docker Images, Read-Only/Writable Layers, CoW e Dive","mainEntityOfPage":{"@type":"WebPage","@id":"http://0.0.0.0:4000/posts/docker-images-ro-rw-layers-cow-dive/"},"url":"http://0.0.0.0:4000/posts/docker-images-ro-rw-layers-cow-dive/"}</script>
+<!-- End Jekyll SEO tag -->
+
+
+<script type="text/javascript" src="/assets/js/darkmode.js"></script>
+
+</head><body>
+  <main class="container">
+    <section class="about">
+      <div class="about-header ">
+      <div class="about-title">
+      <a href="/">
+        
+        <img src="/assets/portfolio.png" alt="Matheus Andrade" />
+        
+      </a>
+      <h2 id="title">
+        <a href="/">Matheus Andrade</a>
+      </h2>
+      </div><p class="tagline">DevOps Engineer</p></div>
+      
+      <ul class="social about-footer "><a href="https://github.com/matheuslao" target="_blank">
+          <li>
+            <i class="icon-github-circled"></i>
+          </li>
+        </a><a href="https://www.linkedin.com/in/matheuslao" target="_blank">
+          <li>
+            <i class="icon-linkedin-squared"></i>
+          </li>
+        </a><a href="https://twitter.com/matheuslao" target="_blank">
+          <li>
+            <i class="icon-twitter-squared"></i>
+          </li>
+        </a><a href="https://instagram.com/matheuslao" target="_blank">
+          <li>
+            <i class="icon-instagram"></i>
+          </li>
+        </a><a href=" https://t.me/matheuslao" target="_blank">
+          <li>
+            <i class="icon-telegram"></i>
+          </li>
+        </a></ul><nav class="navigation about-footer ">
+        <ul>
+          
+        </ul>
+      </nav><p class="about-footer ">&copy;
+        2024</p><div class="about-footer ">
+        <p>Dark Mode
+          <i class="icon-moon"></i>
+          <label class="switch">
+            <input type="checkbox" class="dark-mode-toggle">
+            <span class="slider round" onclick="toggleDarkMode()"></span>
+          </label>
+        </p>
+      </div>
+    </section>
+    <section class="content">
+      <div class="post-container">
+  <a class="post-link" href="/posts/docker-images-ro-rw-layers-cow-dive/">
+    <h2 class="post-title">Docker Images, Read-Only/Writable Layers, CoW e Dive</h2>
+  </a>
+  <div class="post-meta">
+    <div class="post-date"><i class="icon-calendar"></i>Jan 6, 2021</div><ul class="post-categories"><li>docker</li><li>dockerfile</li><li>build</li><li>imagens</li><li>layers</li><li>cow</li><li>dive</li></ul></div>
+  <div class="post">
+    <p>Saudações! No <a href="https://matheuslao.dev/posts/docker-imagens-empty-filesystem-layers/">post anterior</a> vimos a definição de imagens, além da conceituação de <em>layers</em> e como estas são intrínsecas ao assunto. Entendemos também a existência de <em>filesystem layers</em>, assim como <em>empty layers</em> no processo de formação de uma imagem, a partir de instruções (nem todas geram layers) de um <em>Dockerfile</em>.</p>
+
+<p>O objetivo deste post é continuar dissecando o tema, com alguns estudos/experimentações que nos permitam entender mais como imagens Docker funcionam e são construídas.</p>
+
+<h2 id="tldr">TL;DR.</h2>
+
+<ul>
+  <li>Em relação às <strong>filesystem layers</strong>, podemos categorizá-las em camadas <em>ReadOnly</em> ou <em>Writable</em>;</li>
+  <li>Camadas de Imagens são <em>ReadOnly</em>;</li>
+  <li>Camada do Container é <em>Writable</em>;</li>
+  <li>O <strong>CoW: Copy on Write</strong> acontece tanto no momento do build, quanto com um container em execução, quando há a necessidade de uma modificação em um arquivo/objeto;</li>
+  <li>Ferramentas externas como o <a href="https://github.com/wagoodman/dive">Dive</a> auxiliam no processo de análises das camadas.</li>
+</ul>
+
+<h2 id="read-only-layers-e-writable-layers">Read-Only Layers e Writable Layers</h2>
+
+<p>Há uma relação indissociável entre imagem e <em>layers</em>. Neste ponto, já entendemos que uma imagem pode ser definida como um <strong>agrupamento ordenado de <em>layers</em>, sendo estas ultimas, modificações imutáveis resultados de instruções</strong> presentes no <em>Dockerfile</em>.</p>
+
+<p>A palavra em destaque aqui nesta seção é <strong>imutabilidade</strong>, ou seja, a <em>layer</em> representa uma modificação realizada na imagem e esta modificação é permanente <strong>no contexto da <em>layer</em></strong>. Se desejarmos fazer uma segunda modificação, após a primeira já ter sido persistida, tal alteração estará registrada em uma <em>layer</em> posterior.</p>
+
+<p>Em resumo:</p>
+
+<blockquote>
+  <p><strong>Layers de Imagens são **Read Only</strong>.**</p>
+</blockquote>
+
+<p>Aqui também é importante destacar que uma <em>filesystem layer</em> possuirá persistido <strong>apenas os arquivos modificados em relação à camada anterior</strong>. Por isso, a ordenação das <em>layers</em> é importante.</p>
+
+<p>E o que, ou melhor, de quem seria uma <em>layer</em> gravável? A resposta: <strong>Container!</strong></p>
+
+<p>Containers nada mais são (do ponto de vista de camadas e armazenamento), do que a adição de uma <em>layer</em> gravável sobre as <em>layers</em> que formam uma imagem. Quando um container é instanciado, uma nova camada, desta vez <em>writable</em>, é criada no topo da imagem (camadas <em>read-only</em> de formação). Quando o container morre (e deletado do <em>host</em>), a camada <em>rw</em> é destruída:</p>
+
+<blockquote>
+  <p><strong>Container adiciona uma <em>layer</em> gravável sobre as <em>layers</em> que formam a imagem.</strong></p>
+</blockquote>
+
+<table>
+  <thead>
+    <tr>
+      <th style="text-align: center"><img src="https://docs.docker.com/storage/storagedriver/images/sharing-layers.jpg" alt="containers e imagem layers" /></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align: center"><em>https://docs.docker.com/storage/storagedriver/images/sharing-layers.jpg</em></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Neste ponto, já é possível perceber o ganho que obtemos, em relação ao espaço em disco consumido, ao instanciar vários containers (réplicas) oriundos de uma mesma imagem. Se instanciarmos 10 containers de uma imagem alpine, por exemplo, as <em>layers read-only</em> da imagem não serão multiplicadas por 10, mas sim reaproveitadas e 10 camadas <em>writables</em> serão criadas e associadas cada uma à um container em execução.</p>
+
+<p>No Docker, temos 2 propriedades que nos mostram tais valores: <code class="language-plaintext highlighter-rouge">size</code> e <code class="language-plaintext highlighter-rouge">virtual size</code>:</p>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">size</code>: o tamanho da camada gravável do container;</li>
+  <li><code class="language-plaintext highlighter-rouge">virtual size</code>: o tamanho total das <em>layers</em> que fazem o container funcionar: <em>image layers</em> + <em>writable layer</em>.</li>
+</ul>
+
+<p>No exemplo abaixo, 4 containers já encerrados, oriundos da imagem alpine, sendo que 3 não escreveram em sua camada <em>writable</em> (size 0) e 1 container teve escrita:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>docker ps <span class="nt">-as</span>
+CONTAINER ID   IMAGE     COMMAND   CREATED          STATUS                      PORTS     NAMES             SIZE
+789d0f43e596   alpine    <span class="s2">"sh"</span>      6 seconds ago    Exited <span class="o">(</span>0<span class="o">)</span> 5 seconds ago              upbeat_rubin      0B <span class="o">(</span>virtual 5.58MB<span class="o">)</span>
+fee34efca016   alpine    <span class="s2">"sh"</span>      10 seconds ago   Exited <span class="o">(</span>0<span class="o">)</span> 8 seconds ago              reverent_kalam    0B <span class="o">(</span>virtual 5.58MB<span class="o">)</span>
+40c0882f562d   alpine    <span class="s2">"sh"</span>      14 seconds ago   Exited <span class="o">(</span>0<span class="o">)</span> 12 seconds ago             upbeat_sinoussi   0B <span class="o">(</span>virtual 5.58MB<span class="o">)</span>
+90b23b31f6aa   alpine    <span class="s2">"sh"</span>      56 seconds ago   Exited <span class="o">(</span>0<span class="o">)</span> 29 seconds ago             musing_swirles    6.89MB <span class="o">(</span>virtual 12.5MB<span class="o">)</span>
+</code></pre></div></div>
+
+<p>Quanto de espaço em disco total estamos consumindo em nosso <em>host</em>, em relação às <em>layers</em>? A respostá é 12,5Mb.</p>
+
+<h2 id="cow-copy-on-write">CoW: Copy on Write</h2>
+
+<p>Agora que sabemos quais <em>layers</em> são <em>read-only</em> e quais são <em>read-write</em>, vamos <em>meter mão na massa</em> para entender um conceito: CoW.</p>
+
+<p>Tomemos como exemplo o conteúdo do arquivo <code class="language-plaintext highlighter-rouge">file1.txt</code> e do <code class="language-plaintext highlighter-rouge">Dockerfile</code>:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">#file1.txt</span>
+Primeira linha
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">#Dockerfile</span>
+FROM alpine
+WORKDIR /exemplo
+COPY file1.txt <span class="nb">.</span>
+RUN <span class="nb">echo</span> <span class="s2">"segunda linha"</span> <span class="o">&gt;&gt;</span> file1.txt
+</code></pre></div></div>
+
+<p>Realizando o build da imagem:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ docker build -t exemplo:01 .
+
+Step 1/4 : FROM alpine
+latest: Pulling from library/alpine
+801bfaa63ef2: Pull complete
+Digest: sha256:3c7497bf0c7af93428242d6176e8f7905f2201d8fc5861f45be7a346b5f23436
+Status: Downloaded newer image for alpine:latest
+ ---&gt; 389fef711851
+Step 2/4 : WORKDIR /exemplo
+ ---&gt; Running in 90cd105624a7
+Removing intermediate container 90cd105624a7
+ ---&gt; f1b5e463de89
+Step 3/4 : COPY file1.txt .
+ ---&gt; 6d149ef7f9fd
+Step 4/4 : RUN echo "segunda linha" &gt;&gt; file1.txt
+ ---&gt; Running in 536635e86c81
+Removing intermediate container 536635e86c81
+ ---&gt; c741d831be62
+Successfully built c741d831be62
+Successfully tagged exemplo:01
+</code></pre></div></div>
+
+<p>Tranquilo perceber que as 4 instruções criaram <em>layers</em> e que todas elas são <em>filesystem layers</em>, concorda? Nossa imagem, no final, possui 05 layers sendo 02 provenientes da imagem alpine (instrução <code class="language-plaintext highlighter-rouge">FROM</code>) e 3 layers das instruções adicionais:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ docker image history exemplo:01
+
+IMAGE          CREATED              CREATED BY                                      SIZE      COMMENT
+c741d831be62   About a minute ago   /bin/sh -c echo "segunda linha" &gt;&gt; file1.txt    29B
+6d149ef7f9fd   About a minute ago   /bin/sh -c #(nop) COPY file:91615d60f2e8bc41…   15B
+f1b5e463de89   About a minute ago   /bin/sh -c #(nop) WORKDIR /exemplo              0B
+389fef711851   2 weeks ago          /bin/sh -c #(nop)  CMD ["/bin/sh"]              0B
+&lt;missing&gt;      2 weeks ago          /bin/sh -c #(nop) ADD file:ec475c2abb2d46435…   5.58MB
+
+$ docker image inspect exemplo:01 --format=''
+
+{layers [
+	sha256:777b2c648970480f50f5b4d0af8f9a8ea798eea43dbcf40ce4a8c7118736bdcf 
+	sha256:cd894f30417890083791614709bacc9b0f771366be38bda720ea6f622b02ad1c 
+	sha256:8062d1a8dd2c9a137a8d0e90bff7d94511f014bb37f8fafb22edad46b4ca2cbe 
+	sha256:2bc55ad19ad6d5fb5992402b70becd7e6973dc69ed10ce36a59681815cf9bd78
+	]
+}
+</code></pre></div></div>
+
+<p>Olhemos as nossas 4 <em>filesystem layers</em> armazenadas em nosso diretório de armazenamento das layers no Docker:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>ll /var/lib/docker/overlay2
+drwx------. 5 matheus root     69 Jan  2 10a4d6010850c9ea40dc684d7ec90d5e0cf90d790d06b8be9365f54465bd426c
+drwx------. 5 matheus root     69 Jan  2 14be73d49e9d43672ee62a42250873a6eb4d8994d28d7f2d40228dc548de3735
+drwx------. 5 matheus root     69 Jan  2 86899162aaea64b2c0e2ab86279f4f21d41317bbe9566df29d6362cb770c2bff
+drwx------. 5 matheus root     69 Jan  2 aada6a14754e4e648f22adcc5f92b2c744dbc0e12db5f5f622300db6127a0046
+drwx------. 2 matheus root   8192 Jan  9 l
+</code></pre></div></div>
+
+<p>A <em>layer</em> do alpine é a pasta <code class="language-plaintext highlighter-rouge">14be73d49e9d43...</code> e temos parte de seu conteúdo mostrado abaixo:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>ll /var/lib/docker/overlay2/14be73d49e9d43672ee62a42250873a6eb4d8994d28d7f2d40228dc548de3735/diff
+drwx------. 5 matheus root     69 Jan  2 bin
+drwx------. 5 matheus root     69 Jan  2 dev
+drwx------. 5 matheus root     69 Jan  2 etc
+drwx------. 5 matheus root     69 Jan  2 home
+drwx------. 5 matheus root     69 Jan  2 lib
+drwx------. 5 matheus root     69 Jan  2 media
+drwx------. 5 matheus root     69 Jan  2 mnt
+...
+
+</code></pre></div></div>
+
+<p>A conteúdo gerado pela instrução <code class="language-plaintext highlighter-rouge">WORKDIR /exemplo</code> apenas criou a pasta:</p>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>ll /var/lib/docker/overlay2/10a4d6010850c9ea40dc684d7ec90d5e0cf90d790d06b8be9365f54465bd426c/diff
+drwx------. 5 matheus root     69 Jan  2 exemplo
+
+
+<span class="nv">$ </span>ll /var/lib/docker/overlay2/10a4d6010850c9ea40dc684d7ec90d5e0cf90d790d06b8be9365f54465bd426c/diff/exemplo
+drwx------. 5 matheus root     69 Jan  2 ./
+drwx------. 5 matheus root     69 Jan  2 ../
+</code></pre></div></div>
+
+<p>Já na <em>layer</em> <code class="language-plaintext highlighter-rouge">86899162a...</code>, temos o arquivo copiado pela instrução <code class="language-plaintext highlighter-rouge">COPY file1.txt</code>:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>ll /var/lib/docker/overlay2/86899162aaea64b2c0e2ab86279f4f21d41317bbe9566df29d6362cb770c2bff/diff/exemplo/
+<span class="nt">-rwx------</span><span class="nb">.</span> 5 matheus root     69 Jan  2 file1.txt
+
+<span class="nv">$ </span><span class="nb">cat</span> /var/lib/docker/overlay2/86899162aaea64b2c0e2ab86279f4f21d41317bbe9566df29d6362cb770c2bff/diff/exemplo/file1.txt
+primeira linha
+</code></pre></div></div>
+
+<p>Enquanto na <em>layer</em> pertencente à instrução <code class="language-plaintext highlighter-rouge">RUN</code>, temos o novo arquivo <code class="language-plaintext highlighter-rouge">file1.txt</code> persistido:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>ll /var/lib/docker/overlay2/aada6a14754e4e648f22adcc5f92b2c744dbc0e12db5f5f622300db6127a0046/diff/exemplo/
+<span class="nt">-rwx------</span><span class="nb">.</span> 5 matheus root     69 Jan  2 file1.txt
+
+
+<span class="nv">$ </span><span class="nb">cat</span> /var/lib/docker/overlay2/aada6a14754e4e648f22adcc5f92b2c744dbc0e12db5f5f622300db6127a0046/diff/exemplo/file1.txt
+primeira linha
+segunda linha
+</code></pre></div></div>
+
+<p>Perceba que o arquivo <code class="language-plaintext highlighter-rouge">file1.txt</code> está presente em 2 <em>layers</em> diferentes e por conseguinte em 2 diretórios no <em>filesystem</em>,  pois foi “tocado” por 2 instruções que o criou/modificou.</p>
+
+<p>CoW é exatamente este comportamento: <strong>Copy on Write</strong>. Quando uma <em>layer</em> precisa modificar um arquivo/diretório, este é copiado para dentro da nova <em>layer</em> e então, modificado. Já quando há apenas leitura de um objeto, esta ação é realizada na <em>layer</em> em que o arquivo/diretório é encontrado.</p>
+
+<p>O exemplo acima mostrou o <em>CoW</em> no momento do <em>build</em> de uma imagem, mas o processo também acontece quando um container está em execução e precisa modificar um arquivo/dietório, afinal, o container também possui sua <em>layer</em>, lembra? O objeto é copiado para a <em>top layer</em> (container) e nela realizadas suas modificações.</p>
+
+<p>Veja o exemplo abaixo, em que é instanciado um container a partir da imagem <code class="language-plaintext highlighter-rouge">exemplo:01</code>, que altera o arquivo <code class="language-plaintext highlighter-rouge">file1.txt</code>:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>docker container run exemplo:01 /bin/sh <span class="nt">-c</span> <span class="s1">'echo "linha escrita pelo container" &gt;&gt; /exemplo/file1.txt'</span>
+</code></pre></div></div>
+
+<p>O container acima é instanciado e por causa de sua instrução, copia o arquivo para sua layer e efetua a modificação. Podemos ver a <em>layer</em> do container abaixo:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>ll /var/lib/docker/overlay2/cdc6c284aef2e9dfac02c905c2aa3dda3d9e11d3ef37bd9d2d15fe4429dd9519/diff/exemplo/
+<span class="nt">-rwx------</span><span class="nb">.</span> 5 matheus root     69 Jan  2 file1.txt
+
+
+<span class="nv">$ </span><span class="nb">cat</span> /var/lib/docker/overlay2/cdc6c284aef2e9dfac02c905c2aa3dda3d9e11d3ef37bd9d2d15fe4429dd9519/diff/exemplo/file1.txt
+primeira linha
+segunda linha
+linha escrita pelo container
+</code></pre></div></div>
+
+<p>Enquanto o container estiver presente no <em>host</em>, sua <em>layer</em> estará também presente (e consumindo espaço em disco).</p>
+
+<blockquote>
+  <p><strong>CoW acontece tanto no momento do build de uma imagem, quanto na execução de um container, quando este precisa alterar um arquivo/diretório.</strong></p>
+</blockquote>
+
+<p>Aqui neste ponto, já podemos pensar que é uma boa prática, <strong>reduzir ao máximo o número de layers em que um arquivo aparece</strong>, ou seja, concentrar o máximo possível as modificações de um arquivo na mesma layer que o criou, para evitar aumento de espaço em disco. Nem sempre é possível, mas quanto mais alcançar tal objetivo, melhor a utilização/consumo de espaço.</p>
+
+<p>Um outro aprendizado que podemos ter é que a camada do container <strong>inicia-se sempre com o menor tamanho possível</strong>, e somente quando precisa-se modificar um objeto, há o aumento de tamanho desta camada.</p>
+
+<p><strong>OBS</strong>: o modo como o <strong>Copy on Write</strong> é implementado pode variar a depender do <a href="https://docs.docker.com/storage/storagedriver/#copying-makes-containers-efficient">Storage Driver</a> implementado. Entretanto, a estratégia e objetivo é sempre este: leitura na camada onde o objeto se encontra em seu estado mais recente (de acordo com a ordem das camadas na imagem) e cópia do objeto para a alteração.</p>
+
+<h2 id="dive-visualizando-melhor-as-layers">Dive: Visualizando melhor as Layers</h2>
+
+<p>Neste post e em outros, sempre recorri à comandos docker como <code class="language-plaintext highlighter-rouge">history</code> ou <code class="language-plaintext highlighter-rouge">inspect</code> para visualizar as <em>layers</em>, além claro, de visualizar as modificações no <em>filesystem</em> lá no diretório <code class="language-plaintext highlighter-rouge">/var/lib/docker/overlay2</code>.</p>
+
+<p>O <a href="https://github.com/wagoodman/dive">Dive</a> é uma ferramenta externa bem legal que auxilia bastante na exploração de uma imagem docker, conteúdo das camadas, além de ajudar na descoberta de alternativas para melhorar o tamanho de suas imagens. O legal é que você pode rodar ela como container!</p>
+
+<p>Uma vez instalado o <em>Dive</em>, basta apenas chamar ele passando a imagem: <code class="language-plaintext highlighter-rouge">dive &lt;image&gt;</code>.</p>
+
+<blockquote>
+  <p>Página da ferramenta <strong>Dive</strong>: https://github.com/wagoodman/dive</p>
+</blockquote>
+
+<p>Vamos utilizar o <em>Dive</em> em container. Para melhorar a usabilidade, eu criei o seguinte <em>alias</em>:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">alias </span><span class="nv">dive</span><span class="o">=</span><span class="s1">'sudo docker run --rm -it -v /var/run/docker.sock:/var/run/docker.sock wagoodman/dive'</span>
+</code></pre></div></div>
+
+<p>E agora, posso analisar a imagem <code class="language-plaintext highlighter-rouge">exemplo:01</code>:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>dive imagem:01
+</code></pre></div></div>
+
+<p>A saída é no próprio terminal, onde vc tem várias opções para melhorar a análise e investigação das <em>layers</em>. Na imagem abaixo, analisando a <em>layer</em> referente à instrução <code class="language-plaintext highlighter-rouge">COPY</code>de nossa imagem, consigo visualizar quais arquivos foram adicionados/removidos/modificados, inclusive com destaque de cores para cada cenário.</p>
+
+<p>Vale a pena conferir!</p>
+
+<table>
+  <thead>
+    <tr>
+      <th style="text-align: center"><a href="https://postimg.cc/8f6vQ3VS"><img src="https://i.postimg.cc/MHsmR2Pv/dive001.png" alt="dive001.png" /></a></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align: center"><em>Analisando a imagem exemplo:01 com o Dive</em></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="conclusão">Conclusão</h2>
+
+<p>Em grandes empresas, com muitos times, produtos e/ou serviços, a tendência é uma alta quantidade de imagens gerenciadas. Para que isso não vire um problema, atentar-se para o tamanho das imagens, a relação entre elas (imagens que são construídas a partir de outras), o número de <em>layers</em> que as formam, além de claro, como cada <em>layer</em> é construída são alguns pontos de atenção. Um melhor entendimento sobre <em>Layers</em> e suas categorizações podem auxiliar nos processos de trabalho sobre estes pontos.</p>
+
+<p>Abraços!</p>
+
+<p>:D</p>
+
+  </div><div id="disqus_thread" style="margin-top:25px"></div>
+  <script>
+    var disqus_config = function () {
+      this.page.url = 'http://0.0.0.0:4000/posts/docker-images-ro-rw-layers-cow-dive/';
+      this.page.identifier = 'http://0.0.0.0:4000/posts/docker-images-ro-rw-layers-cow-dive/';
+    };
+    (function () {
+      var d = document, s = d.createElement('script');
+      s.src = 'https://matheuslao.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments
+      powered by Disqus.</a></noscript></div>
+
+    </section>
+    <footer class="">
+      <ul class="social about-footer "><a href="https://github.com/matheuslao" target="_blank">
+          <li>
+            <i class="icon-github-circled"></i>
+          </li>
+        </a><a href="https://www.linkedin.com/in/matheuslao" target="_blank">
+          <li>
+            <i class="icon-linkedin-squared"></i>
+          </li>
+        </a><a href="https://twitter.com/matheuslao" target="_blank">
+          <li>
+            <i class="icon-twitter-squared"></i>
+          </li>
+        </a><a href="https://instagram.com/matheuslao" target="_blank">
+          <li>
+            <i class="icon-instagram"></i>
+          </li>
+        </a><a href=" https://t.me/matheuslao" target="_blank">
+          <li>
+            <i class="icon-telegram"></i>
+          </li>
+        </a></ul><nav class="navigation about-footer ">
+        <ul>
+          
+        </ul>
+      </nav><p class="about-footer ">&copy;
+        2024</p><div class="about-footer ">
+        <p>Dark Mode
+          <i class="icon-moon"></i>
+          <label class="switch">
+            <input type="checkbox" class="dark-mode-toggle">
+            <span class="slider round" onclick="toggleDarkMode()"></span>
+          </label>
+        </p>
+      </div>
+    </footer>
+  </main>
+  
+  <script type="text/javascript" src="/assets/js/darkmode.js"></script>
+  
+  <script src="/assets/js/simple-jekyll-search.min.js"></script>
+  <script src="/assets/js/search.js"></script>
+  
+</body>
+
+</html>

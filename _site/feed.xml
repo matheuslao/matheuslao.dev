@@ -1,0 +1,1182 @@
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.3.3">Jekyll</generator><link href="http://0.0.0.0:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://0.0.0.0:4000/" rel="alternate" type="text/html" /><updated>2024-06-01T14:54:01+00:00</updated><id>http://0.0.0.0:4000/feed.xml</id><title type="html">matheuslao.dev</title><subtitle>Write an awesome  description for your new site here. You can edit this line in _config.yml. It will appear in your document head meta (for Google search results) and in your feed.xml site description.</subtitle><entry><title type="html">Docker Images, Read-Only/Writable Layers, CoW e Dive</title><link href="http://0.0.0.0:4000/posts/docker-images-ro-rw-layers-cow-dive/" rel="alternate" type="text/html" title="Docker Images, Read-Only/Writable Layers, CoW e Dive" /><published>2021-01-06T15:00:10+00:00</published><updated>2021-01-06T15:00:10+00:00</updated><id>http://0.0.0.0:4000/posts/docker-images-ro-rw-layers-cow-dive</id><content type="html" xml:base="http://0.0.0.0:4000/posts/docker-images-ro-rw-layers-cow-dive/"><![CDATA[<p>Saudações! No <a href="https://matheuslao.dev/posts/docker-imagens-empty-filesystem-layers/">post anterior</a> vimos a definição de imagens, além da conceituação de <em>layers</em> e como estas são intrínsecas ao assunto. Entendemos também a existência de <em>filesystem layers</em>, assim como <em>empty layers</em> no processo de formação de uma imagem, a partir de instruções (nem todas geram layers) de um <em>Dockerfile</em>.</p>
+
+<p>O objetivo deste post é continuar dissecando o tema, com alguns estudos/experimentações que nos permitam entender mais como imagens Docker funcionam e são construídas.</p>
+
+<h2 id="tldr">TL;DR.</h2>
+
+<ul>
+  <li>Em relação às <strong>filesystem layers</strong>, podemos categorizá-las em camadas <em>ReadOnly</em> ou <em>Writable</em>;</li>
+  <li>Camadas de Imagens são <em>ReadOnly</em>;</li>
+  <li>Camada do Container é <em>Writable</em>;</li>
+  <li>O <strong>CoW: Copy on Write</strong> acontece tanto no momento do build, quanto com um container em execução, quando há a necessidade de uma modificação em um arquivo/objeto;</li>
+  <li>Ferramentas externas como o <a href="https://github.com/wagoodman/dive">Dive</a> auxiliam no processo de análises das camadas.</li>
+</ul>
+
+<h2 id="read-only-layers-e-writable-layers">Read-Only Layers e Writable Layers</h2>
+
+<p>Há uma relação indissociável entre imagem e <em>layers</em>. Neste ponto, já entendemos que uma imagem pode ser definida como um <strong>agrupamento ordenado de <em>layers</em>, sendo estas ultimas, modificações imutáveis resultados de instruções</strong> presentes no <em>Dockerfile</em>.</p>
+
+<p>A palavra em destaque aqui nesta seção é <strong>imutabilidade</strong>, ou seja, a <em>layer</em> representa uma modificação realizada na imagem e esta modificação é permanente <strong>no contexto da <em>layer</em></strong>. Se desejarmos fazer uma segunda modificação, após a primeira já ter sido persistida, tal alteração estará registrada em uma <em>layer</em> posterior.</p>
+
+<p>Em resumo:</p>
+
+<blockquote>
+  <p><strong>Layers de Imagens são **Read Only</strong>.**</p>
+</blockquote>
+
+<p>Aqui também é importante destacar que uma <em>filesystem layer</em> possuirá persistido <strong>apenas os arquivos modificados em relação à camada anterior</strong>. Por isso, a ordenação das <em>layers</em> é importante.</p>
+
+<p>E o que, ou melhor, de quem seria uma <em>layer</em> gravável? A resposta: <strong>Container!</strong></p>
+
+<p>Containers nada mais são (do ponto de vista de camadas e armazenamento), do que a adição de uma <em>layer</em> gravável sobre as <em>layers</em> que formam uma imagem. Quando um container é instanciado, uma nova camada, desta vez <em>writable</em>, é criada no topo da imagem (camadas <em>read-only</em> de formação). Quando o container morre (e deletado do <em>host</em>), a camada <em>rw</em> é destruída:</p>
+
+<blockquote>
+  <p><strong>Container adiciona uma <em>layer</em> gravável sobre as <em>layers</em> que formam a imagem.</strong></p>
+</blockquote>
+
+<table>
+  <thead>
+    <tr>
+      <th style="text-align: center"><img src="https://docs.docker.com/storage/storagedriver/images/sharing-layers.jpg" alt="containers e imagem layers" /></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align: center"><em>https://docs.docker.com/storage/storagedriver/images/sharing-layers.jpg</em></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Neste ponto, já é possível perceber o ganho que obtemos, em relação ao espaço em disco consumido, ao instanciar vários containers (réplicas) oriundos de uma mesma imagem. Se instanciarmos 10 containers de uma imagem alpine, por exemplo, as <em>layers read-only</em> da imagem não serão multiplicadas por 10, mas sim reaproveitadas e 10 camadas <em>writables</em> serão criadas e associadas cada uma à um container em execução.</p>
+
+<p>No Docker, temos 2 propriedades que nos mostram tais valores: <code class="language-plaintext highlighter-rouge">size</code> e <code class="language-plaintext highlighter-rouge">virtual size</code>:</p>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">size</code>: o tamanho da camada gravável do container;</li>
+  <li><code class="language-plaintext highlighter-rouge">virtual size</code>: o tamanho total das <em>layers</em> que fazem o container funcionar: <em>image layers</em> + <em>writable layer</em>.</li>
+</ul>
+
+<p>No exemplo abaixo, 4 containers já encerrados, oriundos da imagem alpine, sendo que 3 não escreveram em sua camada <em>writable</em> (size 0) e 1 container teve escrita:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>docker ps <span class="nt">-as</span>
+CONTAINER ID   IMAGE     COMMAND   CREATED          STATUS                      PORTS     NAMES             SIZE
+789d0f43e596   alpine    <span class="s2">"sh"</span>      6 seconds ago    Exited <span class="o">(</span>0<span class="o">)</span> 5 seconds ago              upbeat_rubin      0B <span class="o">(</span>virtual 5.58MB<span class="o">)</span>
+fee34efca016   alpine    <span class="s2">"sh"</span>      10 seconds ago   Exited <span class="o">(</span>0<span class="o">)</span> 8 seconds ago              reverent_kalam    0B <span class="o">(</span>virtual 5.58MB<span class="o">)</span>
+40c0882f562d   alpine    <span class="s2">"sh"</span>      14 seconds ago   Exited <span class="o">(</span>0<span class="o">)</span> 12 seconds ago             upbeat_sinoussi   0B <span class="o">(</span>virtual 5.58MB<span class="o">)</span>
+90b23b31f6aa   alpine    <span class="s2">"sh"</span>      56 seconds ago   Exited <span class="o">(</span>0<span class="o">)</span> 29 seconds ago             musing_swirles    6.89MB <span class="o">(</span>virtual 12.5MB<span class="o">)</span>
+</code></pre></div></div>
+
+<p>Quanto de espaço em disco total estamos consumindo em nosso <em>host</em>, em relação às <em>layers</em>? A respostá é 12,5Mb.</p>
+
+<h2 id="cow-copy-on-write">CoW: Copy on Write</h2>
+
+<p>Agora que sabemos quais <em>layers</em> são <em>read-only</em> e quais são <em>read-write</em>, vamos <em>meter mão na massa</em> para entender um conceito: CoW.</p>
+
+<p>Tomemos como exemplo o conteúdo do arquivo <code class="language-plaintext highlighter-rouge">file1.txt</code> e do <code class="language-plaintext highlighter-rouge">Dockerfile</code>:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">#file1.txt</span>
+Primeira linha
+</code></pre></div></div>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">#Dockerfile</span>
+FROM alpine
+WORKDIR /exemplo
+COPY file1.txt <span class="nb">.</span>
+RUN <span class="nb">echo</span> <span class="s2">"segunda linha"</span> <span class="o">&gt;&gt;</span> file1.txt
+</code></pre></div></div>
+
+<p>Realizando o build da imagem:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ docker build -t exemplo:01 .
+
+Step 1/4 : FROM alpine
+latest: Pulling from library/alpine
+801bfaa63ef2: Pull complete
+Digest: sha256:3c7497bf0c7af93428242d6176e8f7905f2201d8fc5861f45be7a346b5f23436
+Status: Downloaded newer image for alpine:latest
+ ---&gt; 389fef711851
+Step 2/4 : WORKDIR /exemplo
+ ---&gt; Running in 90cd105624a7
+Removing intermediate container 90cd105624a7
+ ---&gt; f1b5e463de89
+Step 3/4 : COPY file1.txt .
+ ---&gt; 6d149ef7f9fd
+Step 4/4 : RUN echo "segunda linha" &gt;&gt; file1.txt
+ ---&gt; Running in 536635e86c81
+Removing intermediate container 536635e86c81
+ ---&gt; c741d831be62
+Successfully built c741d831be62
+Successfully tagged exemplo:01
+</code></pre></div></div>
+
+<p>Tranquilo perceber que as 4 instruções criaram <em>layers</em> e que todas elas são <em>filesystem layers</em>, concorda? Nossa imagem, no final, possui 05 layers sendo 02 provenientes da imagem alpine (instrução <code class="language-plaintext highlighter-rouge">FROM</code>) e 3 layers das instruções adicionais:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ docker image history exemplo:01
+
+IMAGE          CREATED              CREATED BY                                      SIZE      COMMENT
+c741d831be62   About a minute ago   /bin/sh -c echo "segunda linha" &gt;&gt; file1.txt    29B
+6d149ef7f9fd   About a minute ago   /bin/sh -c #(nop) COPY file:91615d60f2e8bc41…   15B
+f1b5e463de89   About a minute ago   /bin/sh -c #(nop) WORKDIR /exemplo              0B
+389fef711851   2 weeks ago          /bin/sh -c #(nop)  CMD ["/bin/sh"]              0B
+&lt;missing&gt;      2 weeks ago          /bin/sh -c #(nop) ADD file:ec475c2abb2d46435…   5.58MB
+
+$ docker image inspect exemplo:01 --format=''
+
+{layers [
+	sha256:777b2c648970480f50f5b4d0af8f9a8ea798eea43dbcf40ce4a8c7118736bdcf 
+	sha256:cd894f30417890083791614709bacc9b0f771366be38bda720ea6f622b02ad1c 
+	sha256:8062d1a8dd2c9a137a8d0e90bff7d94511f014bb37f8fafb22edad46b4ca2cbe 
+	sha256:2bc55ad19ad6d5fb5992402b70becd7e6973dc69ed10ce36a59681815cf9bd78
+	]
+}
+</code></pre></div></div>
+
+<p>Olhemos as nossas 4 <em>filesystem layers</em> armazenadas em nosso diretório de armazenamento das layers no Docker:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>ll /var/lib/docker/overlay2
+drwx------. 5 matheus root     69 Jan  2 10a4d6010850c9ea40dc684d7ec90d5e0cf90d790d06b8be9365f54465bd426c
+drwx------. 5 matheus root     69 Jan  2 14be73d49e9d43672ee62a42250873a6eb4d8994d28d7f2d40228dc548de3735
+drwx------. 5 matheus root     69 Jan  2 86899162aaea64b2c0e2ab86279f4f21d41317bbe9566df29d6362cb770c2bff
+drwx------. 5 matheus root     69 Jan  2 aada6a14754e4e648f22adcc5f92b2c744dbc0e12db5f5f622300db6127a0046
+drwx------. 2 matheus root   8192 Jan  9 l
+</code></pre></div></div>
+
+<p>A <em>layer</em> do alpine é a pasta <code class="language-plaintext highlighter-rouge">14be73d49e9d43...</code> e temos parte de seu conteúdo mostrado abaixo:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>ll /var/lib/docker/overlay2/14be73d49e9d43672ee62a42250873a6eb4d8994d28d7f2d40228dc548de3735/diff
+drwx------. 5 matheus root     69 Jan  2 bin
+drwx------. 5 matheus root     69 Jan  2 dev
+drwx------. 5 matheus root     69 Jan  2 etc
+drwx------. 5 matheus root     69 Jan  2 home
+drwx------. 5 matheus root     69 Jan  2 lib
+drwx------. 5 matheus root     69 Jan  2 media
+drwx------. 5 matheus root     69 Jan  2 mnt
+...
+
+</code></pre></div></div>
+
+<p>A conteúdo gerado pela instrução <code class="language-plaintext highlighter-rouge">WORKDIR /exemplo</code> apenas criou a pasta:</p>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>ll /var/lib/docker/overlay2/10a4d6010850c9ea40dc684d7ec90d5e0cf90d790d06b8be9365f54465bd426c/diff
+drwx------. 5 matheus root     69 Jan  2 exemplo
+
+
+<span class="nv">$ </span>ll /var/lib/docker/overlay2/10a4d6010850c9ea40dc684d7ec90d5e0cf90d790d06b8be9365f54465bd426c/diff/exemplo
+drwx------. 5 matheus root     69 Jan  2 ./
+drwx------. 5 matheus root     69 Jan  2 ../
+</code></pre></div></div>
+
+<p>Já na <em>layer</em> <code class="language-plaintext highlighter-rouge">86899162a...</code>, temos o arquivo copiado pela instrução <code class="language-plaintext highlighter-rouge">COPY file1.txt</code>:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>ll /var/lib/docker/overlay2/86899162aaea64b2c0e2ab86279f4f21d41317bbe9566df29d6362cb770c2bff/diff/exemplo/
+<span class="nt">-rwx------</span><span class="nb">.</span> 5 matheus root     69 Jan  2 file1.txt
+
+<span class="nv">$ </span><span class="nb">cat</span> /var/lib/docker/overlay2/86899162aaea64b2c0e2ab86279f4f21d41317bbe9566df29d6362cb770c2bff/diff/exemplo/file1.txt
+primeira linha
+</code></pre></div></div>
+
+<p>Enquanto na <em>layer</em> pertencente à instrução <code class="language-plaintext highlighter-rouge">RUN</code>, temos o novo arquivo <code class="language-plaintext highlighter-rouge">file1.txt</code> persistido:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>ll /var/lib/docker/overlay2/aada6a14754e4e648f22adcc5f92b2c744dbc0e12db5f5f622300db6127a0046/diff/exemplo/
+<span class="nt">-rwx------</span><span class="nb">.</span> 5 matheus root     69 Jan  2 file1.txt
+
+
+<span class="nv">$ </span><span class="nb">cat</span> /var/lib/docker/overlay2/aada6a14754e4e648f22adcc5f92b2c744dbc0e12db5f5f622300db6127a0046/diff/exemplo/file1.txt
+primeira linha
+segunda linha
+</code></pre></div></div>
+
+<p>Perceba que o arquivo <code class="language-plaintext highlighter-rouge">file1.txt</code> está presente em 2 <em>layers</em> diferentes e por conseguinte em 2 diretórios no <em>filesystem</em>,  pois foi “tocado” por 2 instruções que o criou/modificou.</p>
+
+<p>CoW é exatamente este comportamento: <strong>Copy on Write</strong>. Quando uma <em>layer</em> precisa modificar um arquivo/diretório, este é copiado para dentro da nova <em>layer</em> e então, modificado. Já quando há apenas leitura de um objeto, esta ação é realizada na <em>layer</em> em que o arquivo/diretório é encontrado.</p>
+
+<p>O exemplo acima mostrou o <em>CoW</em> no momento do <em>build</em> de uma imagem, mas o processo também acontece quando um container está em execução e precisa modificar um arquivo/dietório, afinal, o container também possui sua <em>layer</em>, lembra? O objeto é copiado para a <em>top layer</em> (container) e nela realizadas suas modificações.</p>
+
+<p>Veja o exemplo abaixo, em que é instanciado um container a partir da imagem <code class="language-plaintext highlighter-rouge">exemplo:01</code>, que altera o arquivo <code class="language-plaintext highlighter-rouge">file1.txt</code>:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>docker container run exemplo:01 /bin/sh <span class="nt">-c</span> <span class="s1">'echo "linha escrita pelo container" &gt;&gt; /exemplo/file1.txt'</span>
+</code></pre></div></div>
+
+<p>O container acima é instanciado e por causa de sua instrução, copia o arquivo para sua layer e efetua a modificação. Podemos ver a <em>layer</em> do container abaixo:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>ll /var/lib/docker/overlay2/cdc6c284aef2e9dfac02c905c2aa3dda3d9e11d3ef37bd9d2d15fe4429dd9519/diff/exemplo/
+<span class="nt">-rwx------</span><span class="nb">.</span> 5 matheus root     69 Jan  2 file1.txt
+
+
+<span class="nv">$ </span><span class="nb">cat</span> /var/lib/docker/overlay2/cdc6c284aef2e9dfac02c905c2aa3dda3d9e11d3ef37bd9d2d15fe4429dd9519/diff/exemplo/file1.txt
+primeira linha
+segunda linha
+linha escrita pelo container
+</code></pre></div></div>
+
+<p>Enquanto o container estiver presente no <em>host</em>, sua <em>layer</em> estará também presente (e consumindo espaço em disco).</p>
+
+<blockquote>
+  <p><strong>CoW acontece tanto no momento do build de uma imagem, quanto na execução de um container, quando este precisa alterar um arquivo/diretório.</strong></p>
+</blockquote>
+
+<p>Aqui neste ponto, já podemos pensar que é uma boa prática, <strong>reduzir ao máximo o número de layers em que um arquivo aparece</strong>, ou seja, concentrar o máximo possível as modificações de um arquivo na mesma layer que o criou, para evitar aumento de espaço em disco. Nem sempre é possível, mas quanto mais alcançar tal objetivo, melhor a utilização/consumo de espaço.</p>
+
+<p>Um outro aprendizado que podemos ter é que a camada do container <strong>inicia-se sempre com o menor tamanho possível</strong>, e somente quando precisa-se modificar um objeto, há o aumento de tamanho desta camada.</p>
+
+<p><strong>OBS</strong>: o modo como o <strong>Copy on Write</strong> é implementado pode variar a depender do <a href="https://docs.docker.com/storage/storagedriver/#copying-makes-containers-efficient">Storage Driver</a> implementado. Entretanto, a estratégia e objetivo é sempre este: leitura na camada onde o objeto se encontra em seu estado mais recente (de acordo com a ordem das camadas na imagem) e cópia do objeto para a alteração.</p>
+
+<h2 id="dive-visualizando-melhor-as-layers">Dive: Visualizando melhor as Layers</h2>
+
+<p>Neste post e em outros, sempre recorri à comandos docker como <code class="language-plaintext highlighter-rouge">history</code> ou <code class="language-plaintext highlighter-rouge">inspect</code> para visualizar as <em>layers</em>, além claro, de visualizar as modificações no <em>filesystem</em> lá no diretório <code class="language-plaintext highlighter-rouge">/var/lib/docker/overlay2</code>.</p>
+
+<p>O <a href="https://github.com/wagoodman/dive">Dive</a> é uma ferramenta externa bem legal que auxilia bastante na exploração de uma imagem docker, conteúdo das camadas, além de ajudar na descoberta de alternativas para melhorar o tamanho de suas imagens. O legal é que você pode rodar ela como container!</p>
+
+<p>Uma vez instalado o <em>Dive</em>, basta apenas chamar ele passando a imagem: <code class="language-plaintext highlighter-rouge">dive &lt;image&gt;</code>.</p>
+
+<blockquote>
+  <p>Página da ferramenta <strong>Dive</strong>: https://github.com/wagoodman/dive</p>
+</blockquote>
+
+<p>Vamos utilizar o <em>Dive</em> em container. Para melhorar a usabilidade, eu criei o seguinte <em>alias</em>:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">alias </span><span class="nv">dive</span><span class="o">=</span><span class="s1">'sudo docker run --rm -it -v /var/run/docker.sock:/var/run/docker.sock wagoodman/dive'</span>
+</code></pre></div></div>
+
+<p>E agora, posso analisar a imagem <code class="language-plaintext highlighter-rouge">exemplo:01</code>:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>dive imagem:01
+</code></pre></div></div>
+
+<p>A saída é no próprio terminal, onde vc tem várias opções para melhorar a análise e investigação das <em>layers</em>. Na imagem abaixo, analisando a <em>layer</em> referente à instrução <code class="language-plaintext highlighter-rouge">COPY</code>de nossa imagem, consigo visualizar quais arquivos foram adicionados/removidos/modificados, inclusive com destaque de cores para cada cenário.</p>
+
+<p>Vale a pena conferir!</p>
+
+<table>
+  <thead>
+    <tr>
+      <th style="text-align: center"><a href="https://postimg.cc/8f6vQ3VS"><img src="https://i.postimg.cc/MHsmR2Pv/dive001.png" alt="dive001.png" /></a></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align: center"><em>Analisando a imagem exemplo:01 com o Dive</em></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="conclusão">Conclusão</h2>
+
+<p>Em grandes empresas, com muitos times, produtos e/ou serviços, a tendência é uma alta quantidade de imagens gerenciadas. Para que isso não vire um problema, atentar-se para o tamanho das imagens, a relação entre elas (imagens que são construídas a partir de outras), o número de <em>layers</em> que as formam, além de claro, como cada <em>layer</em> é construída são alguns pontos de atenção. Um melhor entendimento sobre <em>Layers</em> e suas categorizações podem auxiliar nos processos de trabalho sobre estes pontos.</p>
+
+<p>Abraços!</p>
+
+<p>:D</p>]]></content><author><name></name></author><category term="docker" /><category term="dockerfile" /><category term="build" /><category term="imagens" /><category term="layers" /><category term="cow" /><category term="dive" /><summary type="html"><![CDATA[Saudações! No post anterior vimos a definição de imagens, além da conceituação de layers e como estas são intrínsecas ao assunto. Entendemos também a existência de filesystem layers, assim como empty layers no processo de formação de uma imagem, a partir de instruções (nem todas geram layers) de um Dockerfile.]]></summary></entry><entry><title type="html">Docker Images, Empty Layers e FileSystem Layers</title><link href="http://0.0.0.0:4000/posts/docker-imagens-empty-filesystem-layers/" rel="alternate" type="text/html" title="Docker Images, Empty Layers e FileSystem Layers" /><published>2021-01-02T14:50:10+00:00</published><updated>2021-01-02T14:50:10+00:00</updated><id>http://0.0.0.0:4000/posts/docker-imagens-empty-filesystem-layers</id><content type="html" xml:base="http://0.0.0.0:4000/posts/docker-imagens-empty-filesystem-layers/"><![CDATA[<p>Saudações! Containers não são mais novidades. Hoje, Devs e Ops lidam diariamente com aplicações containerizadas e são responsáveis pela construção da imagem da aplicação a ser implantada em produção.</p>
+
+<p>Mas, <strong>como anda o processo de construção das imagens das aplicações de sua empresa</strong>? Todos os membros do time compreendem o que acontece no <em>building</em> de uma imagem? Há uma busca por otimizações em reaproveitamento, consumo de espaço em disco, processos de atualização das imagens de todos os apps?</p>
+
+<p>Entender imagens (de containers) e construí-las de forma otimizada não é tão trivial para um iniciante no assunto, mas também nada tão difícil. Pensando nisso, tentarei publicar em alguns posts informações que achei interessante durante meu aprendizado.</p>
+
+<p>O assunto desta publicação é <strong>Layers</strong>, principalmente por causa de uma dúvida que aparece muito nas equipes de trabalho:</p>
+
+<blockquote>
+  <p><strong>Afinal, quais instruções do Dockerfile geram Layers e/ou aumentam o espaço em disco consumido?</strong></p>
+</blockquote>
+
+<h2 id="tldr">TL;DR</h2>
+
+<ul>
+  <li>O conceito de <em>layers</em> nem sempre está atrelado à existência de alterações no sistema de arquivos (<em>filesystem layers</em>);</li>
+  <li>Nem todas as instruções do Dockerfile geram layers (sejam quais forem) . Exemplo: instrução <code class="language-plaintext highlighter-rouge">ARG</code>;</li>
+  <li>Nem sempre a instrução <code class="language-plaintext highlighter-rouge">RUN</code> gera uma <em>filesystem layer</em>, como aparentemente indica a documentação;</li>
+  <li>Outras instruções podem gerar uma <em>filesystem layer</em> como a <code class="language-plaintext highlighter-rouge">WORKDIR</code>, e não somente <code class="language-plaintext highlighter-rouge">RUN, COPY e ADD</code> como, aparentemente, indica uma página da documentação.</li>
+  <li>Atentar-se sempre ao contexto da palavra <em>layer</em> presente nos livros, documentação, etc., pois podem referenciar somente <em>filesystem layers</em>.</li>
+</ul>
+
+<h2 id="o-que-é-uma-imagem-docker">O que é uma Imagem Docker?</h2>
+
+<p>Fui procurar na documentação oficial da Docker o conceito de <strong>imagem</strong>. No <a href="https://docs.docker.com/glossary/">Glossário</a>, temos a seguinte definição:</p>
+
+<blockquote>
+  <p>“Docker images are the basis of containers. An Image is an ordered collection of root filesystem changes and the corresponding execution parameters for use within a container runtime. An image typically contains a union of layered filesystems stacked on top of each other. An image does not have state and it never changes.”</p>
+</blockquote>
+
+<p>Praticamente diz tudo. Aqui deixo a minha tradução livre:</p>
+
+<ul>
+  <li>coleção <strong>ordenada</strong> de <strong>mudanças imutáveis</strong> no <strong>sistema de arquivos</strong> mais <strong>parâmetros de execução</strong> em <strong>camadas empilhadas</strong> umas sobre as outras;</li>
+</ul>
+
+<p>Na grande maioria dos casos, estas camadas são construídas através das instruções presentes no famoso arquivo <strong>Dockerfile</strong>.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th style="text-align: center"><img src="https://miro.medium.com/max/2520/1*p8k1b2DZTQEW_yf0hYniXw.png" alt="dockerfile-como-origem-para-contrucao-imagem" /></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align: center"><em>Fonte: https://medium.com/platformer-blog/practical-guide-on-writing-a-dockerfile-for-your-application-89376f88b3b5</em></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>PS: Não gosto nem de lembrar, mas temos que assumir que existe outro método de gerar imagens, a partir de containers: <em>docker commit</em>. :D</p>
+
+<h2 id="o-que-são-layers">O que são Layers?</h2>
+
+<p>Recorrendo novamente ao <a href="https://docs.docker.com/glossary/">Glossário do Docker</a> temos:</p>
+
+<blockquote>
+  <p>“In an image, a layer is modification to the image, represented by an instruction in the Dockerfile. Layers are applied in sequence to the base image to create the final image. When an image is updated or rebuilt, only layers that change need to be updated, and unchanged layers are cached locally. This is part of why Docker images are so fast and lightweight. The sizes of each layer add up to equal the size of the final image.”</p>
+</blockquote>
+
+<p>Aqui, mais uma vez, deixo minha tradução livre e resumida do que considero importante:</p>
+
+<ul>
+  <li><strong>Modificação</strong> da imagem representada por uma <strong>instrução do Dockerfile</strong> aplicadas em <strong>sequência</strong> à imagem base para criar outra imagem final.</li>
+</ul>
+
+<p>Repare que é bem sutil (e por isso, confuso numa primeira vez) o conceito de Layer e Imagem. Muitas vezes usamos a definição de <em>layer</em> para imagem, concorda?</p>
+
+<p>Podemos, por exemplo, afirmar que <strong>1 layer é uma imagem intermediária</strong>, já que o empilhamento ordenado de N camadas representará a <strong>imagem final</strong>.</p>
+
+<p>Guardemos, por ora, que uma <strong>imagem é um agrupamento ordenado de layers e estas são as modificações imutáveis, resultados de instruções presentes no Dockerfile.</strong></p>
+
+<h2 id="layers-quantas-são">Layers: Quantas são?</h2>
+
+<p>Vamos visualizar, metendo a “mão na massa”! Baixemos uma das imagens mais famosas (e menores) que existem:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>docker image pull alpine
+Using default tag: latest
+latest: Pulling from library/alpine
+801bfaa63ef2: Pulling fs layer
+801bfaa63ef2: Verifying Checksum
+801bfaa63ef2: Download <span class="nb">complete
+</span>801bfaa63ef2: Pull <span class="nb">complete
+</span>Digest: sha256:3c7497bf0c7af93428242d6176e8f7905f2201d8fc5861f45be7a346b5f23436
+Status: Downloaded newer image <span class="k">for </span>alpine:latest
+docker.io/library/alpine:latest
+</code></pre></div></div>
+
+<p>Pela saída de texto do comando acima executado, podemos verificar que <strong>1 layer</strong>, identificada pelo <em>hash 801bfaa63ef2</em>, foi baixada. Vamos rodar o comando <code class="language-plaintext highlighter-rouge">inspect</code>, fazendo um filtro no formato de saída:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>docker image inspect alpine <span class="nt">--format</span><span class="o">=</span><span class="s1">''</span>
+<span class="o">{</span>layers <span class="o">[</span>sha256:777b2c648970480f50f5b4d0af8f9a8ea798eea43dbcf40ce4a8c7118736bdcf] <span class="o">}</span>
+</code></pre></div></div>
+
+<p>O retorno também é <strong>1 layer</strong>, identificada por um <em>hash sha256</em>. Se formos mais curiosos, encontraremos a camada baixada no sistema de arquivos, onde o Docker a armazena (usando Linux, <a href="https://docs.docker.com/storage/storagedriver/">storage driver overlay2</a> e sem alteração do local de instalação do Docker):</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>ll /var/lib/docker/overlay2/
+drwx------. 5 matheus root     69 Oct 19 b29be06af013d08aa3a729693e9368e2b43f3a7fd4de362caaaee93ef3dc2c59
+drwx------. 2 matheus root   8192 Nov  9 l
+</code></pre></div></div>
+
+<p>Perceba que apenas 1 pasta identificada por um <em>hash</em> está presente. E despreze que os <em>hashes</em> não batem, pois não é mesmo pra acontecer.</p>
+
+<p>Agora, vamos utilizar o comando <code class="language-plaintext highlighter-rouge">history</code> para dissecar um pouco mais a imagem:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>docker image <span class="nb">history </span>alpine
+IMAGE          CREATED       CREATED BY                                      SIZE      COMMENT
+389fef711851   2 weeks ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  CMD ["/bin/sh"]              0B</span>
+&lt;missing&gt;      2 weeks ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop) ADD file:ec475c2abb2d46435ÔÇª   5.58MB</span>
+</code></pre></div></div>
+
+<p>Desprezando a falta do identificador da <em>layer</em> mais baixa (<code class="language-plaintext highlighter-rouge">&lt;missing&gt;</code> que explicarei em outro post), verificamos que a imagem alpine é <strong>composta por 2 layers</strong>, cujas instruções de construção são:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ADD file:a4845c3840a3fd0e41e4635a179cce20c81afc6c02e34e3fd5bd2d535698918b <span class="k">in</span> / 
+CMD <span class="o">[</span><span class="s2">"/bin/sh"</span><span class="o">]</span>
+</code></pre></div></div>
+
+<p>Podemos confirmar também <a href="https://hub.docker.com/layers/alpine/library/alpine/latest/images/sha256-549694ea68340c26d1d85c00039aa11ad835be279bfd475ff4284b705f92c24e?context=explore">lá no Docker Hub:</a></p>
+
+<table>
+  <thead>
+    <tr>
+      <th style="text-align: center"><a href="https://postimg.cc/LqYTWDsQ"><img src="https://i.postimg.cc/XvxzpD6W/alpine-layers-001.png" alt="alpine-layers-001.png" /></a></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align: center"><em>Visualizando as camadas da imagem alpine:latest no Docker Hub</em></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>E agora? 1 ou 2 camadas na imagem alpine?</p>
+
+<h2 id="empty-layers-e-filesystem-layers">Empty Layers e FileSystem Layers</h2>
+
+<p>A resposta para a pergunta anterior é: 2 camadas!</p>
+
+<p>A “pegadinha” acontece que apenas 1 camada gera persistência, alteração no sistema de arquivos, enquanto a outra camada é “vazia” em modificação/alteração do <em>filesystem</em>.</p>
+
+<p>Neste ponto, podemos dizer que a camada que vemos o <code class="language-plaintext highlighter-rouge">docker pull</code> baixar (a mesma vista no <code class="language-plaintext highlighter-rouge">inspect</code> e presente no <code class="language-plaintext highlighter-rouge">/var/lib/docker/overlay</code>) pode ser categorizada como uma <strong>FS layer</strong>, ou seja, uma camada de sistema de arquivos. Já a camada construída pela instrução <code class="language-plaintext highlighter-rouge">CMD ["/bin/sh"]</code> pode ser categorizada como uma <strong>Empty Layer</strong>, pois não gera alteração no <em>filesystem</em>, não consumindo espaço, e portanto, não sendo baixada.</p>
+
+<p>Aqui que reside a confusão conceitual de <em>Layers</em>. Em versões anteriores do Docker e de construção de imagens, as <em>layers</em> sempre estavam associadas à <strong>modificações no filesystem</strong>. Contudo, em versões atuais, há instruções presentes no Dockerfile que <strong>não alteram o filesystem e precisam ser definidas como layers</strong>, pois fazem parte do processo de construção (empilhamento ordenado de instruções) de uma imagem.</p>
+
+<p>Lembre-se das definições atuais de Imagens e Layers lá do Glossário do Docker:</p>
+
+<ul>
+  <li>imagens: coleção ordenada de mudanças no <em>filesystem</em> e parâmetros de execução;</li>
+  <li>layers: modificação da imagem, através de uma instrução.</li>
+</ul>
+
+<h2 id="todas-instruções-do-dockerfile-geram-layers">Todas instruções do Dockerfile geram Layers?</h2>
+
+<p>Aqui, mais uma vez, vamos meter mão na massa!</p>
+
+<p>Em uma página da documentação oficial do Docker que versa sobre <a href="https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#minimize-the-number-of-layers">boas práticas no processo de construção de imagens</a>, temos a seguinte informação:</p>
+
+<blockquote>
+  <p>“Only the instructions RUN, COPY, ADD create layers. Other instructions create temporary intermediate images, and do not increase the size of the build.”</p>
+</blockquote>
+
+<p>Opa, respondido? Talvez. Uma leitura mais atenta e você pode notar que:</p>
+
+<ul>
+  <li>RUN, COPY, ADD criam layers;</li>
+  <li>outras instruções criam <em>temporary intermediate images</em>.</li>
+</ul>
+
+<p>Pelo que já apresentamos, podemos definir <em>layers</em> como imagens intermediárias, logo, determinadas instruções criariam camadas temporárias que não aumentariam o espaço consumido do <em>build</em>.</p>
+
+<p>Repare que aqui a documentação nos confunde com o conceito de <em>layers</em>: somente RUN, COPY e ADD criam <strong>filesystem layers</strong>, enquanto outras não (<em>empty layers</em>).</p>
+
+<p>Neste ponto, gostaria de levantar alguma dúvidas para testarmos/validarmos, pois me confundiu muito no início:</p>
+
+<ul>
+  <li>Dúvida 01: A instrução <code class="language-plaintext highlighter-rouge">RUN</code> sempre vai gerar uma <em>FS Layer</em> ?</li>
+  <li>Dúvida 02: A instrução <code class="language-plaintext highlighter-rouge">WORKDIR</code> quando cria um novo path (uma alteração no <em>filesystem</em>), geraria uma <em>FS Layer</em>?</li>
+  <li>Dúvida 03: Alguma instrução do Dockerfile não gera Layer (seja filesystem layers ou empty layers)?</li>
+</ul>
+
+<p>Vamos testar algumas das principais instruções de utilização na construção de imagens docker para validar os conceitos apresentados e hipóteses levantadas. Todas as instruções possíveis estão presentes no <a href="https://docs.docker.com/engine/reference/builder/">Dockerfile Reference</a>.</p>
+
+<p>Tomemos como exemplo o Dockerfile abaixo onde tentei utilizar as instruções mais conhecidas:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ARG  VERSION=latest
+FROM alpine:${VERSION}
+LABEL mantainer="matheuslao.dev"
+ENV URL "https://artefatos.empresa.com.br/app-1.2.3.jar"
+WORKDIR /
+RUN addgroup -g 10001 francisco &amp;&amp; adduser -u 10001 francisco -G francisco -s /sbin/nologin --disabled-password
+RUN apk add curl \
+    &amp;&amp; curl -o app.jar $URL
+WORKDIR /myapp
+COPY file1.txt .
+ADD file2.txt .
+RUN export USER="francisco" \
+    &amp;&amp; echo $USER
+USER francisco
+CMD ["/bin/sh"]
+ENTRYPOINT ["java", "-XX:+UnlockExperimentalVMOptions", "-Djava.security.egd=file:/dev/./urandom","-jar","app.jar"]
+EXPOSE 80
+</code></pre></div></div>
+
+<p>Analisemos o resultado do <em>build</em> da imagem (saída do comando sem o <a href="https://docs.docker.com/develop/develop-images/build_enhancements/">buildkit</a>):</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ docker image build -t minha-imagem .
+
+Sending build context to Docker daemon  4.608kB
+Step 1/15 : ARG  VERSION=latest
+Step 2/15 : FROM alpine:${VERSION}
+ ---&gt; 389fef711851
+Step 3/15 : LABEL mantainer="matheuslao.dev"
+ ---&gt; Running in 7b372ffdfc95
+Removing intermediate container 7b372ffdfc95
+ ---&gt; 6a5c0a8519d8
+Step 4/15 : ENV URL "https://raw.githubusercontent.com/matheuslao/matheuslao.dev/main/static/img/matheuslao.jpg"
+ ---&gt; Running in c376576063ff
+Removing intermediate container c376576063ff
+ ---&gt; 12828b25bdff
+Step 5/15 : WORKDIR /
+ ---&gt; Running in 65cf9d3a17bb
+Removing intermediate container 65cf9d3a17bb
+ ---&gt; e3d131d4c8f9
+Step 6/15 : RUN addgroup -g 10001 francisco &amp;&amp; adduser -u 10001 francisco -G francisco -s /sbin/nologin --disabled-password
+ ---&gt; Running in 1144c1a690da
+Removing intermediate container 1144c1a690da
+ ---&gt; 370ee1418f66
+Step 7/15 : RUN apk add curl     &amp;&amp; curl -o app.jar $URL
+ ---&gt; Running in aee90a4a5f09
+fetch http://dl-cdn.alpinelinux.org/alpine/v3.12/main/x86_64/APKINDEX.tar.gz
+fetch http://dl-cdn.alpinelinux.org/alpine/v3.12/community/x86_64/APKINDEX.tar.gz
+(1/4) Installing ca-certificates (20191127-r4)
+(2/4) Installing nghttp2-libs (1.41.0-r0)
+(3/4) Installing libcurl (7.69.1-r3)
+(4/4) Installing curl (7.69.1-r3)
+Executing busybox-1.31.1-r19.trigger
+Executing ca-certificates-20191127-r4.trigger
+OK: 7 MiB in 18 packages
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100 21926  100 21926    0     0  32872      0 --:--:-- --:--:-- --:--:-- 32823
+Removing intermediate container aee90a4a5f09
+ ---&gt; 5afd3449a399
+Step 8/15 : WORKDIR /myapp
+ ---&gt; Running in 1e1d3f15d239
+Removing intermediate container 1e1d3f15d239
+ ---&gt; d1ccd41ed16e
+Step 9/15 : COPY file1.txt .
+ ---&gt; 476f0884009f
+Step 10/15 : ADD file2.txt .
+ ---&gt; 8e8b4ed9127d
+Step 11/15 : RUN export USER="francisco"     &amp;&amp; echo $USER
+ ---&gt; Running in ca95419bbf81
+francisco
+Removing intermediate container ca95419bbf81
+ ---&gt; 4b75a0feb0de
+Step 12/15 : USER francisco
+ ---&gt; Running in a510fe377aff
+Removing intermediate container a510fe377aff
+ ---&gt; 562d417df13d
+Step 13/15 : CMD ["/bin/sh"]
+ ---&gt; Running in c7db6aabcd80
+Removing intermediate container c7db6aabcd80
+ ---&gt; 0054ff10e607
+Step 14/15 : ENTRYPOINT ["java", "-XX:+UnlockExperimentalVMOptions", "-Djava.security.egd=file:/dev/./urandom","-jar","app.jar"]
+ ---&gt; Running in fc1f9065fc21
+Removing intermediate container fc1f9065fc21
+ ---&gt; 5c7cd86d14a3
+Step 15/15 : EXPOSE 80
+ ---&gt; Running in fa19fc0c27e3
+Removing intermediate container fa19fc0c27e3
+ ---&gt; 986b3c714918
+Successfully built 986b3c714918
+Successfully tagged minha-imagem:latest
+
+
+</code></pre></div></div>
+
+<p>São 15 instruções em nosso Dockerfile que geram 15 steps (passos) no build:</p>
+
+<ul>
+  <li>Step 1/15: Repare que nenhuma informação adicional é gerada como a criação/geração de uma <strong>layer</strong>;</li>
+  <li>Step 2/15: A <strong>FS Layer</strong> da imagem alpine é referenciada aqui (mas já sabemos que no fundo, a imagem alpine possui 2 layers);</li>
+  <li>Step 3/15: Um container de hash 7b372ffdfc95 sobe, executa a instrução, morre e uma layer de hash 6a5c0a8519d8 é gerada;</li>
+  <li>Step 4/15: Um container sobe, executa a instrução, morre e uma layer é gerada;</li>
+  <li>Step 5/15: Um container sobe, executa a instrução, morre e uma layer é gerada;</li>
+  <li>Step 6/15: Um container sobe, executa a instrução, morre e uma layer é gerada;</li>
+  <li>Step 7/15: Um container sobe, executa a instrução, morre e uma layer é gerada;</li>
+  <li>Step 8/15: Um container sobe, executa a instrução, morre e uma layer é gerada;</li>
+  <li>Step 9/15: Uma layer é gerada com a transferência do arquivo copiado;</li>
+  <li>Step 10/15: Uma layer é gerada com a transferência do arquivo adicionado;</li>
+  <li>Step 11/15: Um container sobe, executa a instrução, morre e uma layer é gerada;</li>
+  <li>Step 12/15: Um container sobe, executa a instrução, morre e uma layer é gerada;</li>
+  <li>Step 13/15: Um container sobe, executa a instrução, morre e uma layer é gerada;</li>
+  <li>Step 14/15: Um container sobe, executa a instrução, morre e uma layer é gerada;</li>
+  <li>Step 15/15: Um container sobe, executa a instrução, morre e uma layer é gerada;</li>
+</ul>
+
+<p>A Dúvida 03 já tem um candidato para a resposta:</p>
+
+<blockquote>
+  <p><strong>Com exceção da instrução <code class="language-plaintext highlighter-rouge">ARG</code>, todas as outras utilizadas geraram layers.</strong></p>
+</blockquote>
+
+<p>Vamos utilizar o <code class="language-plaintext highlighter-rouge">history</code> para validar/confirmar:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>docker image <span class="nb">history </span>minha-imagem
+
+IMAGE          CREATED              CREATED BY                                      SIZE      COMMENT
+9f338caaa516   About a minute ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  EXPOSE 80                    0B</span>
+6449ad4000e5   About a minute ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  ENTRYPOINT ["java" "-XX:+…   0B</span>
+65a889958083   About a minute ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  CMD ["/bin/sh"]              0B</span>
+1abacd6cfbe6   About a minute ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  USER francisco               0B</span>
+2a1a85501e97   About a minute ago   /bin/sh <span class="nt">-c</span> <span class="nb">export </span><span class="nv">USER</span><span class="o">=</span><span class="s2">"francisco"</span>     <span class="o">&amp;&amp;</span> ec…   0B
+f055068ccc6c   About a minute ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop) ADD file:328c2a0fff8f5e953…   10B</span>
+6085fb888a33   About a minute ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop) COPY file:bb441069227b280c…   10B</span>
+cba01884fddf   About a minute ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop) WORKDIR /myapp                0B</span>
+9a12d9d412ae   About a minute ago   /bin/sh <span class="nt">-c</span> apk add curl     <span class="o">&amp;&amp;</span> curl <span class="nt">-o</span> app.j…   3.12MB
+8f54af3a2563   About a minute ago   /bin/sh <span class="nt">-c</span> addgroup <span class="nt">-g</span> 10001 francisco <span class="o">&amp;&amp;</span> ad…   4.7kB
+cb8c60e24f29   About a minute ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop) WORKDIR /                     0B</span>
+bfe0e88f7ca5   About a minute ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  ENV URL=https://raw.githu…   0B</span>
+d1ba00e0a9d5   About a minute ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  LABEL mantainer=matheusla…   0B</span>
+389fef711851   2 weeks ago          /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  CMD ["/bin/sh"]              0B</span>
+&lt;missing&gt;      2 weeks ago          /bin/sh <span class="nt">-c</span> <span class="c">#(nop) ADD file:ec475c2abb2d46435…   5.58MB</span>
+</code></pre></div></div>
+
+<p>É fácil visualizar a presença de 15 layers, concorda? Também não é dificíl dizer que as 2 primeiras layers (de baixo pra cima) são as layers da imagem base alpine. Assim, temos 13 layers registradas adicionalmente (ordenadas e empilhadas conforme instruções) que batem com os 13 steps (depois do FROM) que geraram-as.</p>
+
+<p>Analisemos agora o tamanho das <em>layers</em>. Baseado na experiência anterior, afirmaríamos que 05 são <strong>FS Layers</strong>, pois possuem tamanho &gt; 0.</p>
+
+<p>Vamos validar?</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ docker image inspect minha-imagem --format=''
+
+{layers [
+	sha256:777b2c648970480f50f5b4d0af8f9a8ea798eea43dbcf40ce4a8c7118736bdcf 
+	sha256:9caf12dafc34f81365ffeefa58af5c52eb19e6e58260158f8931f51223a025a6 
+	sha256:e184369701b73ed92ccb30cb4e4f34cc817a6093bfb35ec6b6a9a36946f841fd 
+	sha256:ac91c339ff12c9965379a1eeac8ff51cdf9a4f1d3f229316650aa4d7e2d81bc3 
+	sha256:3449aa1a02c6e90dae7e4785fd52b5b1b09128ee73e88f76fa6149fb2746bfe2 
+	sha256:cfbf011495adad103cc9c9b6c7f8d9525427a3f90b34d49a6db1cf5cde812f09
+	]
+}
+</code></pre></div></div>
+
+<p>Oh, não! São 06 camadas!</p>
+
+<p>Vamos procurar lá em nossa pasta <code class="language-plaintext highlighter-rouge">/var/lib/docker/overlay2</code>:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>ll /var/lib/docker/overlay2/
+drwx------. 5 matheus root     69 Oct 19 b29be06af013d08aa3a729693e9368e2b43f3a7fd4de362caaaee93ef3dc2c59
+drwx------. 5 matheus root     69 Oct 19 6efd98d05213572a70e59f16840758d6072c7298f42621609cd7b286354cda9b
+drwx------. 5 matheus root     69 Oct 19 46b740c355ed78e37fa9f6af8a94c23f63b1ed00d98e797d9468e557d67620f4
+drwx------. 5 matheus root     69 Oct 19 090b364761d9bd50b7d634cf3aecd17794a8264d24d430c198e69deea5d54f5c
+drwx------. 5 matheus root     69 Oct 19 335aa592cb4a89b7165017f78c7b01a0b92c5df78a91c9ceb569c56520f13329
+drwx------. 5 matheus root     69 Oct 19 d7f4b90503fa2bba199564c7714d553080bb45ed1425501da8cdd698208a0803
+drwx------. 2 matheus root   8192 Nov  9 l
+</code></pre></div></div>
+<p>Novamente, 06 camadas!</p>
+
+<p>Tínhamos uma hipótese se a instrução <code class="language-plaintext highlighter-rouge">WORKDIR</code> quando cria um diretório não existente resultaria em uma camada de persistência. Pois bem, apesar do tamanho mostrado lá no comando <code class="language-plaintext highlighter-rouge">history</code> estar <code class="language-plaintext highlighter-rouge">SIZE 0</code>, a instrução <code class="language-plaintext highlighter-rouge">WORKDIR /myapp</code> de nosso Dockerfile cria uma camada no filesystem para persistir.</p>
+
+<p>Se olharmos o <code class="language-plaintext highlighter-rouge">diff</code>de cada camada (explicarei em outro post), encontrarei uma que representa a instrução em questão. Em nosso exemplo, foi a seguinte layer:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ll /var/lib/docker/overlay2/6efd98d05213572a70e59f16840758d6072c7298f42621609cd7b286354cda9b/diff
+drwx------. 5 matheus root     69 Oct 19 myapp
+
+ll /var/lib/docker/overlay2/6efd98d05213572a70e59f16840758d6072c7298f42621609cd7b286354cda9b/diff/myapp/
+drwx------. 5 matheus root     69 Oct 19 ./
+drwx------. 5 matheus root     69 Oct 19 ../
+</code></pre></div></div>
+
+<p>Assim, a Dúvida 02 é respondida com um SIM.</p>
+
+<p>Por fim, podemos também responder a Dúvida 01. Repare que o <code class="language-plaintext highlighter-rouge">Step 11/15</code>, que é a instrução <code class="language-plaintext highlighter-rouge">RUN</code> executando um <em>export</em> e um <em>echo</em> gera uma <em>layer</em> de tamanho zero. Se você tentar procurar no sistema de arquivos, não vai achar a representação desta instrução também. Assim, podemos perceber que nem sempre a instrução <code class="language-plaintext highlighter-rouge">RUN</code> vai alterar o sistema de arquivos e consequentemente persistir em uma camada <em>FS Layer</em>, consumindo espaço em disco.</p>
+
+<h2 id="conclusão">Conclusão</h2>
+
+<p>Com a popularização da containerização, entender um pouco mais como dá-se a construção e formação das imagens pode proporcionar condições de melhorias futuras no processo de desenvolvimento e implantação das aplicações.</p>
+
+<p>Vimos que, para entender o que é uma Imagem Docker, precisamos internalizar o conceito de <em>Layer</em>, parte fundamental e indissociável de sua formação. Também faz-se importante destacar a interpretação correta e o contexto do termo <em>layer</em> presentes em livros, documentações, etc, pois muitas vezes referenciam somente à um tipo de layer: aquelas que criam alterações em sistemas de arquivos, consumindo espaço em disco. Contudo, sabemos que na formação de Imagens Docker, há <em>layers</em> que não geram persistência, mas sim, guardam outras informações cruciais e indispensáveis para a caracterização de uma imagem final.</p>
+
+<p>Abraços!</p>
+
+<p>:D</p>]]></content><author><name></name></author><category term="docker" /><category term="dockerfile" /><category term="build" /><category term="imagens" /><category term="layers" /><category term="empty layers" /><category term="fs layers" /><summary type="html"><![CDATA[Saudações! Containers não são mais novidades. Hoje, Devs e Ops lidam diariamente com aplicações containerizadas e são responsáveis pela construção da imagem da aplicação a ser implantada em produção.]]></summary></entry><entry><title type="html">06 Exemplos de Uso de Credenciais (04 não recomendadas) durante o Build de Imagens Docker</title><link href="http://0.0.0.0:4000/posts/06-exemplos-uso-credenciais-build-docker-images/" rel="alternate" type="text/html" title="06 Exemplos de Uso de Credenciais (04 não recomendadas) durante o Build de Imagens Docker" /><published>2020-12-23T15:30:18+00:00</published><updated>2020-12-23T15:30:18+00:00</updated><id>http://0.0.0.0:4000/posts/06-exemplos-uso-credenciais-build-docker-images</id><content type="html" xml:base="http://0.0.0.0:4000/posts/06-exemplos-uso-credenciais-build-docker-images/"><![CDATA[<p>Em quase todo o processo de construção de imagens Docker, há a necessidade de baixar artefatos (ex: zip, war, jar, etc.) de alguma URL para compor a imagem de nossa aplicação. Por vezes, estas URLs exigem autenticação e precisamos de credenciais para ter acesso ao conteúdo.</p>
+
+<p><strong>Como construir imagens Docker sem comprometer credenciais, como usuários e senhas de acesso?</strong></p>
+
+<p>Os exemplos abaixo seguirão uma ordem, aparentemente natural de boas práticas, onde há uma preocupação em não expor informação sensível na imagem Docker gerada, além de continuar garantindo sua portabilidade.</p>
+
+<h3 id="o-desafio-contextualizando-a-situação">O Desafio: Contextualizando a situação</h3>
+
+<p>Suponha que tenhamos a missão de construir a imagem de uma simples aplicação Java, cujo artefato <em>buildado</em> encontra-se disponível em uma URL que é o repositório de artefatos de sua empresa. (https://artefatos.empresa.com.br/)</p>
+
+<p>Detalhe 01 : a URL do repositório exige autenticação e você possui as credenciais de acesso.</p>
+
+<p>Detalhe 02 : a imagem será compatilhada para outras empresas/clientes implantarem a aplicação.</p>
+
+<h3 id="exemplo-01-codando-na-mão-grande-as-credenciais">Exemplo 01: Codando “na mão grande” as credenciais</h3>
+
+<p>Eu nem deveria começar por este exemplo, porque acredito que ninguém deve fazer assim. Contudo, vamos evoluindo exemplo a exemplo. Analisemos o <em>Dockerfile</em> abaixo:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>FROM alpine
+WORKDIR /
+RUN apk add curl
+RUN curl <span class="nt">-u</span> francisco:abc123 <span class="nt">-o</span> app.jar <span class="s2">"https://artefatos.empresa.com.br/app-1.2.3.jar"</span>
+ENTRYPOINT <span class="o">[</span><span class="s2">"java"</span>, <span class="s2">"-XX:+UnlockExperimentalVMOptions"</span>, <span class="s2">"-Djava.security.egd=file:/dev/./urandom"</span>,<span class="s2">"-jar"</span>,<span class="s2">"app.jar"</span><span class="o">]</span>
+</code></pre></div></div>
+
+<p>Se preocupe somente com a segunda linha da intrução <code class="language-plaintext highlighter-rouge">RUN</code>, onde foi escrito literalmente as credenciais de acesso. Nem preciso dizer que isso aqui é <strong>bem ruim</strong>, não é? Mas vamos <em>buildar</em> a imagem e taguear com uma versão:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>docker build <span class="nt">-t</span> app:01 <span class="nb">.</span>
+</code></pre></div></div>
+
+<p>A partir da imagem gerada (e que será distribuída para outras pessoas), façamos uma inspeção:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>docker image <span class="nb">history </span>app:01
+</code></pre></div></div>
+
+<p>Está lá, para todo o mundo ver, as credenciais de acesso:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>IMAGE          CREATED         CREATED BY                                      SIZE      COMMENT
+e4d60e8650d7   2 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  ENTRYPOINT ["java" "-XX:+…   0B</span>
+68e3c9068540   2 minutes ago   /bin/sh <span class="nt">-c</span> curl <span class="nt">-u</span> francisco:abc123 <span class="nt">-o</span> app.j…   1.23kB
+c1a9701b7132   5 minutes ago   /bin/sh <span class="nt">-c</span> apk add curl                         3.1MB
+c44f6da443d7   5 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop) WORKDIR /                     0B</span>
+389fef711851   6 days ago      /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  CMD ["/bin/sh"]              0B</span>
+&lt;missing&gt;      6 days ago      /bin/sh <span class="nt">-c</span> <span class="c">#(nop) ADD file:ec475c2abb2d46435…   5.58MB</span>
+</code></pre></div></div>
+
+<h3 id="exemplo-02-usando-envs-para-as-credenciais">Exemplo 02: Usando ENVs para as credenciais</h3>
+
+<p>Uma evolução do exemplo acima, seria a tentativa de <em>buildar</em> a imagem com a utilização de <em>ENVs</em>. Segue o <em>Dockerfile</em>:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>FROM alpine
+ENV USER francisco
+ENV PASSWORD abc123
+WORKDIR /
+RUN apk add curl
+RUN curl <span class="nt">-u</span> <span class="nv">$USER</span>:<span class="nv">$PASSWORD</span> <span class="nt">-o</span> app.jar <span class="s2">"https://artefatos.empresa.com.br/app-1.2.3.jar"</span>
+ENTRYPOINT <span class="o">[</span><span class="s2">"java"</span>, <span class="s2">"-XX:+UnlockExperimentalVMOptions"</span>, <span class="s2">"-Djava.security.egd=file:/dev/./urandom"</span>,<span class="s2">"-jar"</span>,<span class="s2">"app.jar"</span><span class="o">]</span>
+</code></pre></div></div>
+
+<p>Possa ser que você ache que agora não vai persistir as credenciais de acesso, pois leu que a <a href="https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#minimize-the-number-of-layers">instrução ENV não cria layer na imagem</a>. Vamos conferir?</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>docker build <span class="nt">-t</span> app:02 <span class="nb">.</span>
+</code></pre></div></div>
+
+<p>Inspecionando a imagem com o comando <code class="language-plaintext highlighter-rouge">docker image inspect app:02</code>:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">[</span>...]
+ <span class="s2">"Config"</span>: <span class="o">{</span>
+            <span class="s2">"Hostname"</span>: <span class="s2">""</span>,
+            <span class="s2">"Domainname"</span>: <span class="s2">""</span>,
+            <span class="s2">"User"</span>: <span class="s2">""</span>,
+            <span class="s2">"AttachStdin"</span>: <span class="nb">false</span>,
+            <span class="s2">"AttachStdout"</span>: <span class="nb">false</span>,
+            <span class="s2">"AttachStderr"</span>: <span class="nb">false</span>,
+            <span class="s2">"Tty"</span>: <span class="nb">false</span>,
+            <span class="s2">"OpenStdin"</span>: <span class="nb">false</span>,
+            <span class="s2">"StdinOnce"</span>: <span class="nb">false</span>,
+            <span class="s2">"Env"</span>: <span class="o">[</span>
+                <span class="s2">"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"</span>,
+                <span class="s2">"USER=francisco"</span>,
+                <span class="s2">"PASSWORD=abc123"</span>
+            <span class="o">]</span>,
+            <span class="s2">"Cmd"</span>: null,
+<span class="o">[</span>...]
+</code></pre></div></div>
+
+<p>E com o mesmo comando do exemplo anterior <code class="language-plaintext highlighter-rouge">docker image history</code>:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>IMAGE          CREATED         CREATED BY                                      SIZE      COMMENT
+284ee6fffad5   3 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  ENTRYPOINT ["java" "-XX:+…"   0B</span>
+904ec10bf219   3 minutes ago   /bin/sh <span class="nt">-c</span> curl <span class="nt">-u</span> <span class="nv">$USER</span>:<span class="nv">$PASSWORD</span> <span class="nt">-o</span> app.ja…   14B
+cc4d45436465   3 minutes ago   /bin/sh <span class="nt">-c</span> apk add curl                         3.1MB
+35e0fe7f8c92   3 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop) WORKDIR /                     0B</span>
+51c378578679   3 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  ENV PASSWORD=abc123          0B</span>
+9ab41a3c7fa5   3 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  ENV USER=francisco           0B</span>
+389fef711851   6 days ago      /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  CMD ["/bin/sh"]              0B</span>
+&lt;missing&gt;      6 days ago      /bin/sh <span class="nt">-c</span> <span class="c">#(nop) ADD file:ec475c2abb2d46435…   5.58MB</span>
+</code></pre></div></div>
+
+<p>Abordarei em outro post, com mais detalhes, as questões de quando <code class="language-plaintext highlighter-rouge">layers</code> são geradas ou não. Por enquanto, nos atentemos que é possível a identificação/visualização das credencenciais com a inspeção da imagem gerada.</p>
+
+<h3 id="código-03-usando-variáveis-de-ambiente-e-run-em-uma-mesma-layer">Código 03: Usando variáveis de ambiente e RUN em uma mesma LAYER</h3>
+
+<p>Nova ideia: utilizar variáveis de ambiente junto instrução RUN para a construção de uma única camada (layer) da imagem. O novo Dockerfile ficaria assim:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>FROM alpine
+WORKDIR /
+RUN apk add curl
+RUN <span class="nb">export </span><span class="nv">USER</span><span class="o">=</span><span class="s2">"francisco"</span> <span class="se">\</span>
+    <span class="o">&amp;&amp;</span> <span class="nb">export </span><span class="nv">PASSWORD</span><span class="o">=</span><span class="s2">"abc123"</span> <span class="se">\</span>
+    <span class="o">&amp;&amp;</span> curl <span class="nt">-u</span> <span class="nv">$USER</span>:<span class="nv">$PASSWORD</span> <span class="nt">-o</span> app.jar <span class="s2">"https://artefatos.empresa.com.br/app-1.2.3.jar"</span>
+ENTRYPOINT <span class="o">[</span><span class="s2">"java"</span>, <span class="s2">"-XX:+UnlockExperimentalVMOptions"</span>, <span class="s2">"-Djava.security.egd=file:/dev/./urandom"</span>,<span class="s2">"-jar"</span>,<span class="s2">"app.jar"</span><span class="o">]</span>
+</code></pre></div></div>
+
+<p>Gerando versão 03 da aplicação:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>docker build <span class="nt">-t</span> app:03
+</code></pre></div></div>
+
+<p>E vamos conferir o resultado, analisando a imagem gerada com o <code class="language-plaintext highlighter-rouge">docker image history</code>:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>IMAGE          CREATED          CREATED BY                                      SIZE      COMMENT
+406c7ce82cf0   37 seconds ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  ENTRYPOINT ["java" "-XX:+…   0B</span>
+325c0a507c68   37 seconds ago   /bin/sh <span class="nt">-c</span> <span class="nb">export </span><span class="nv">USER</span><span class="o">=</span><span class="s2">"francisco"</span> <span class="o">&amp;&amp;</span> <span class="nb">export</span> …  14B
+c1a9701b7132   24 minutes ago   /bin/sh <span class="nt">-c</span> apk add curl                         3.1MB
+c44f6da443d7   24 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop) WORKDIR /                     0B</span>
+389fef711851   6 days ago       /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  CMD ["/bin/sh"]              0B</span>
+&lt;missing&gt;      6 days ago       /bin/sh <span class="nt">-c</span> <span class="c">#(nop) ADD file:ec475c2abb2d46435…   5.58MB</span>
+</code></pre></div></div>
+
+<p>É… também não deu certo. :(</p>
+
+<h3 id="código-04-usando-args">Código 04: Usando ARGS</h3>
+
+<p>Conhecemos o atributo <em>ARGS</em>, ‘similar’ a <em>ENV</em>, e percebemos que podemos ganhar uma mobilidade ao passar as credenciais de acesso no comando de execução do <em>build</em> da imagem (não ter as credenciais escritas no <em>Dockerfile</em>!)</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>FROM alpine
+ARG <span class="nv">USER</span><span class="o">=</span>fake
+ARG <span class="nv">PASSWORD</span><span class="o">=</span>fake
+WORKDIR /
+RUN apk add curl
+RUN curl <span class="nt">-u</span> <span class="nv">$USER</span>:<span class="nv">$PASSWORD</span> <span class="nt">-o</span> app.jar <span class="s2">"https://artefatos.empresa.com.br/app-1.2.3.jar"</span>
+ENTRYPOINT <span class="o">[</span><span class="s2">"java"</span>, <span class="s2">"-XX:+UnlockExperimentalVMOptions"</span>, <span class="s2">"-Djava.security.egd=file:/dev/./urandom"</span>,<span class="s2">"-jar"</span>,<span class="s2">"app.jar"</span><span class="o">]</span>
+</code></pre></div></div>
+
+<p>E o comando para <em>buildar</em> a imagem seria:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>docker build <span class="nt">--build-arg</span> <span class="nv">USER</span><span class="o">=</span>francisco <span class="nt">--build-arg</span> <span class="nv">PASSWORD</span><span class="o">=</span>abc123 <span class="nt">-t</span> app:04 <span class="nb">.</span>
+</code></pre></div></div>
+
+<p>Contudo, ao analisar a imagem com o <code class="language-plaintext highlighter-rouge">docker image history</code>:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>IMAGE          CREATED         CREATED BY                                      SIZE      COMMENT
+e9956a610c1f   5 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  ENTRYPOINT ["java" "-XX:+…   0B</span>
+4bcdfdea08f9   5 minutes ago   |2 <span class="nv">PASSWORD</span><span class="o">=</span>abc123 <span class="nv">USER</span><span class="o">=</span>francisco /bin/sh <span class="nt">-c</span>…   14B
+1f56fb7ca086   5 minutes ago   |2 <span class="nv">PASSWORD</span><span class="o">=</span>abc123 <span class="nv">USER</span><span class="o">=</span>francisco /bin/sh <span class="nt">-c</span>…   3.1MB
+0ccf29f3aadf   5 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop) WORKDIR /                     0B</span>
+556f62d21750   5 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  ARG PASSWORD=fake            0B</span>
+a726e9660660   5 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  ARG USER=fake                0B</span>
+389fef711851   6 days ago      /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  CMD ["/bin/sh"]              0B</span>
+&lt;missing&gt;      6 days ago      /bin/sh <span class="nt">-c</span> <span class="c">#(nop) ADD file:ec475c2abb2d46435…   5.58MB</span>
+</code></pre></div></div>
+
+<p>Se olharmos a documentação <a href="https://docs.docker.com/engine/reference/builder/#arg">neste link</a>, perceberemos que aconteceu exatamente como o descrito: credenciais ainda visíveis.</p>
+
+<h3 id="código-05-adicionando-script-auxiliar">Código 05: Adicionando Script auxiliar</h3>
+
+<p>Podemos tentar fazer um <code class="language-plaintext highlighter-rouge">workaround</code>: utilizar um script intermediário para auxiliar no download do artefato, atrás de uma URL autenticada. Nosso projeto agora ficaria com os seguintes arquivos:</p>
+
+<ul>
+  <li>Dockerfile</li>
+  <li>build.sh</li>
+</ul>
+
+<p>Conteúdo do <em>build.sh</em>:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">#!/bin/sh</span>
+curl <span class="nt">-u</span> francisco:abc123 <span class="nt">-o</span> app.jar <span class="s2">"https://artefatos.empresa.com.br/app-1.2.3.jar"</span>
+</code></pre></div></div>
+
+<p>E o <em>Dockerfile</em>, faz uso do artefato já baixado:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>FROM alpine
+WORKDIR /
+COPY app.jar /
+ENTRYPOINT <span class="o">[</span><span class="s2">"java"</span>, <span class="s2">"-XX:+UnlockExperimentalVMOptions"</span>, <span class="s2">"-Djava.security.egd=file:/dev/./urandom"</span>,<span class="s2">"-jar"</span>,<span class="s2">"app.jar"</span><span class="o">]</span>
+</code></pre></div></div>
+
+<p>A sequência de ações seria:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>chmod +x build.sh
+./build.sh
+docker build -t app:05 .
+</code></pre></div></div>
+
+<p>Percebe-se claramente ao inspecionar a imagem que não há credenciais de acesso nela, confere? Coube a um script auxiliar realizar a autenticação (utilizando as credenciais de acesso), baixar o artefato e apresentá-lo ao contexto do build da imagem.</p>
+
+<p>It works!</p>
+
+<h3 id="código-06-multi-stage-builds">Código 06: multi-stage builds</h3>
+
+<p>Apesar do exemplo anterior ter cumprido seu propósito (imagem docker sem exposição de credenciais sensíveis), tive a sensação (e espero que você também) de que algo ficou estranho: Tivemos que recorrer a arquivos auxiliares, fora do escopo do Docker para resolver o problema.</p>
+
+<p>Se analisarmos um pouco, basicamente o que fizemos foi dividir o processo de build em 2 estágios:</p>
+
+<ul>
+  <li>estágio 01 que baixou os artefatos sob credenciais (script auxiliar)</li>
+  <li>estágio 02 que compilou a imagem (Docker)</li>
+</ul>
+
+<p>Lendo mais a documentação da Docker, percebemos que podemos fazer similar utilizando o conceito de <a href="https://docs.docker.com/develop/develop-images/multistage-build/">multi-stage builds</a>.</p>
+
+<p>Nosso Dockerfile:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>FROM alpine AS download
+ARG USER
+ARG PASSWORD
+RUN apk add curl
+RUN curl <span class="nt">-u</span> <span class="nv">$USER</span>:<span class="nv">$PASSWORD</span> <span class="nt">-o</span> /app.jar <span class="s2">"https://artefatos.empresa.com.br/app-1.2.3.jar"</span>
+
+FROM alpine
+WORKDIR /
+COPY <span class="nt">--from</span><span class="o">=</span>download /app.jar <span class="nb">.</span>
+ENTRYPOINT <span class="o">[</span><span class="s2">"java"</span>, <span class="s2">"-XX:+UnlockExperimentalVMOptions"</span>, <span class="s2">"-Djava.security.egd=file:/dev/./urandom"</span>,<span class="s2">"-jar"</span>,<span class="s2">"app.jar"</span><span class="o">]</span>
+</code></pre></div></div>
+
+<p>Perceba que fizemos exatamente a mesma coisa, agora usando apenas o Docker: Dividimos nosso build em <em>2 estágios</em>.</p>
+
+<ul>
+  <li>no primeiro estágio, uma imagem intermediária é criada (e suas respectivas layers e informações) com o download da aplicação, atrás da autenticação.</li>
+  <li>no segundo estágio, a imagem em construção (a oficial) copia apenas o <code class="language-plaintext highlighter-rouge">app.jar</code> da imagem anterior.</li>
+</ul>
+
+<p>Fácil perceber que, na imagem final não visualizaremos as credenciais. Além disso, a imagem intermediária é destruída ao final do processo de build.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>IMAGE          CREATED         CREATED BY                                      SIZE      COMMENT
+72ef8382df33   3 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  ENTRYPOINT ["java" "-XX:+…   0B</span>
+32a3816fdcd3   3 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop) COPY file:297d62e63eaf8490…   14B</span>
+29385377e66f   3 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop) WORKDIR /                     0B</span>
+389fef711851   6 days ago      /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  CMD ["/bin/sh"]              0B</span>
+&lt;missing&gt;      6 days ago      /bin/sh <span class="nt">-c</span> <span class="c">#(nop) ADD file:ec475c2abb2d46435…   5.58MB</span>
+</code></pre></div></div>
+
+<p>Funciona! E parece-nos uma solução bem inteligente, não acha?</p>
+
+<h3 id="plus-buildkit">PLUS: BuildKit</h3>
+
+<p>Uma funcionalidade “nova” no Docker é o uso do <em>BuildKit</em> para ajudar no manuseio de credenciais durante o processo de construção de imagens.</p>
+
+<p>Ainda não brinquei com este recurso, assim tentarei em breve atualizar este post com um exemplo adicional.</p>
+
+<p>Caso deseje ver como funciona, <a href="https://docs.docker.com/develop/develop-images/build_enhancements/">não deixe de ler a documentação oficial</a></p>]]></content><author><name></name></author><category term="docker" /><category term="dockerfile" /><category term="multistage build" /><summary type="html"><![CDATA[Em quase todo o processo de construção de imagens Docker, há a necessidade de baixar artefatos (ex: zip, war, jar, etc.) de alguma URL para compor a imagem de nossa aplicação. Por vezes, estas URLs exigem autenticação e precisamos de credenciais para ter acesso ao conteúdo.]]></summary></entry><entry><title type="html">Personalizando o Local de Instalação do Linux no WSL2</title><link href="http://0.0.0.0:4000/posts/personalizando-local-instalacao-distro-linux-wsl2/" rel="alternate" type="text/html" title="Personalizando o Local de Instalação do Linux no WSL2" /><published>2020-10-09T01:18:03+00:00</published><updated>2020-10-09T01:18:03+00:00</updated><id>http://0.0.0.0:4000/posts/personalizando-local-instalacao-distro-linux-wsl2</id><content type="html" xml:base="http://0.0.0.0:4000/posts/personalizando-local-instalacao-distro-linux-wsl2/"><![CDATA[<p>Para você que, assim como eu, está usando o WSL2 e deseja possuir várias instâncias Linux rodando no Windows, além de, claro, organizar melhor o local de instalação, este post pode lhe ajudar.</p>
+
+<p>Se você ainda não conhece o <strong>WSL2</strong>, dá uma olhada na <a href="https://docs.microsoft.com/pt-br/windows/wsl/">documentação oficial</a> da própria Microsoft, além de vídeos e posts na internet. Ao instalar e começar a usar, este post poderá ser útil para você.</p>
+
+<p>Irei exemplificar com a instalação do Ubuntu.</p>
+
+<h2 id="instalando-ubuntu">Instalando Ubuntu</h2>
+
+<p>A instalação é simples como manda a documentação oficial. Acessando a <strong>Microsoft Store</strong> a partir de seu computador, pesquise por Ubuntu, escolha a versão e apenas clique em <strong>Obter</strong>:</p>
+
+<p><img src="https://raw.githubusercontent.com/matheuslao/matheuslao.dev/main/static/img/personalizando-local-instalacao-distro-linux-wsl2/01.png" alt="instalando-ubuntu-store" /></p>
+
+<p>Após o download, ainda na mesma janela do produto na Microsoft Store, clique em <strong>Iniciar</strong> para a instalação e configuração inicial do sistema, com a criação do usuário:</p>
+
+<p><img src="https://raw.githubusercontent.com/matheuslao/matheuslao.dev/main/static/img/personalizando-local-instalacao-distro-linux-wsl2/02.png" alt="iniciando-ubuntu-store" /></p>
+
+<p>Após a criação do usuário, você já possui o Ubuntu instalado. Feche a Microsoft Store e deslogue-se do Ubuntu (um <em>exit</em> no terminal, por exemplo).</p>
+
+<p>Em um terminal Windows com acesso ao utilitário <strong>wsl</strong>, verifique que a instalação do Ubuntu está presente e registrada no wsl com o comando abaixo:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>wsl -l -v
+</code></pre></div></div>
+
+<p><img src="https://raw.githubusercontent.com/matheuslao/matheuslao.dev/main/static/img/personalizando-local-instalacao-distro-linux-wsl2/03.png" alt="ubuntu-instalado" /></p>
+
+<h2 id="desfazendo-o-registro-do-ubuntu-e-exportando-disco">Desfazendo o Registro do Ubuntu e exportando disco</h2>
+
+<p>Desligue o Ubuntu:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>wsl --shutdown Ubuntu-20.04
+</code></pre></div></div>
+
+<p>Exporte o disco para um local no formato “.tar”:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>wsl --export Ubuntu-20.04 D:\foo.tar
+</code></pre></div></div>
+
+<p>Agora, descadastre a distribuição do WSL:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>wsl --unregister Ubuntu-20.04
+</code></pre></div></div>
+
+<p><img src="https://raw.githubusercontent.com/matheuslao/matheuslao.dev/main/static/img/personalizando-local-instalacao-distro-linux-wsl2/04.png" alt="ubuntu-descadastrado-disco-exportado" /></p>
+
+<h2 id="fazendo-um-novo-registro-no-wsl-a-partir-do-disco-exportado">Fazendo um novo Registro no WSL a partir do disco exportado</h2>
+
+<p>Importe no WSL o disco exportado anteriormente, definindo um novo nome para a Distribuição, assim como o local de instalação:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>wsl --import ubuntu D:\virtual_machines\WSL2\ubuntu d:\foo.tar
+</code></pre></div></div>
+
+<p><img src="https://raw.githubusercontent.com/matheuslao/matheuslao.dev/main/static/img/personalizando-local-instalacao-distro-linux-wsl2/05.png" alt="novo-ubuntu-importado-a-partir-do-disco" /></p>
+
+<p>Verifique que o disco está no lugar que queremos:</p>
+
+<p><img src="https://raw.githubusercontent.com/matheuslao/matheuslao.dev/main/static/img/personalizando-local-instalacao-distro-linux-wsl2/06.png" alt="windows-explorer-novo-local" /></p>
+
+<p>Voilá!</p>]]></content><author><name></name></author><category term="linux" /><category term="ubuntu" /><category term="WSL2" /><category term="windows" /><category term="wsl" /><summary type="html"><![CDATA[Para você que, assim como eu, está usando o WSL2 e deseja possuir várias instâncias Linux rodando no Windows, além de, claro, organizar melhor o local de instalação, este post pode lhe ajudar.]]></summary></entry><entry><title type="html">Docker Registry com Nexus em um Cluster Swarm + Traefik + NFS</title><link href="http://0.0.0.0:4000/posts/docker-registry-com-nexus-cluster-swarm-traefik/" rel="alternate" type="text/html" title="Docker Registry com Nexus em um Cluster Swarm + Traefik + NFS" /><published>2019-07-07T17:50:17+00:00</published><updated>2019-07-07T17:50:17+00:00</updated><id>http://0.0.0.0:4000/posts/docker-registry-com-nexus-cluster-swarm-traefik</id><content type="html" xml:base="http://0.0.0.0:4000/posts/docker-registry-com-nexus-cluster-swarm-traefik/"><![CDATA[<p>Em uma infraestrutura de containerização, possuir um <em>Private Registry Server</em> para o armazenamento e gerenciamento das imagens da empresa é essencial.</p>
+
+<p>Quando a empresa está na <em>Cloud</em>, a preocupação é na configuração e utilização da ferramenta, mas quando tem-se uma infraestrutura local (<em>on-premise</em>), precisamos atentar a passos anteriores como instalação e o armazenamentos das imagens.</p>
+
+<p>Antes de continuar, gostaria de deixar um aviso:</p>
+
+<blockquote>
+  <p>A solução apresentada é funcional, contudo este post <strong>não é e nem pretende ser “Estado da Arte”</strong>. Há diversas implementações melhores e mais robustas, tanto a nível de solução quanto a nível de tecnologias e ferramentas! Este post é fruto de estudo e aprendizado, assim fique à vontade para enviar sugestões.</p>
+</blockquote>
+
+<h2 id="tldr">TL;DR</h2>
+
+<p>Para um Docker Registry privado completo (armazenamento de imagens próprias + proxy/cache do Docker Hub), a imagem do Nexus precisa expor 3 portas. Assim, a <a href="https://hub.docker.com/r/matheuslao/registry-nexus">imagem utilizada no <em>stack</em></a> foi feita com um <em>Dockerfile</em>:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>FROM sonatype/nexus3:3.16.2
+EXPOSE 8081 8082 8083
+</code></pre></div></div>
+<p>Assumindo a existência de um <em>Cluster Docker Swarm</em> com o <em>Traefik</em> como <em>Ingress/Reverse Proxy/Load Balancer</em> e <em>NFS</em> como armazenamento dos <em>volumes</em>, o seguinte arquivo representa a stack:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>version: '3.7'
+
+services:
+  nexus:
+    image: matheuslao/registry-nexus:3.16.2
+    volumes:
+      - data:/nexus-data
+    deploy:      
+      labels:        
+        - "traefik.nexus.backend=nexus"
+        - "traefik.nexus.frontend.rule=Host:nexus.domain.com"
+        - "traefik.nexus.frontend.entryPoints=https"
+        - "traefik.nexus.port=8081"
+        - "traefik.registry-write.backend=registry-write"
+        - "traefik.registry-write.frontend.rule=Host:registry.domain.com;Method:PUT,DELETE,POST,PATCH"
+        - "traefik.registry-write.frontend.entryPoints=https"
+        - "traefik.registry-write.port=8083"
+        - "traefik.registry-read.backend=registry-read"
+        - "traefik.registry-read.frontend.rule=Host:registry.domain.com;Method:GET,HEAD"
+        - "traefik.registry-read.frontend.entryPoints=https"
+        - "traefik.registry-read.port=8082"
+
+volumes:
+  data:
+    driver_opts:
+      type: "nfs4"
+      o: "addr=NFS-SERVER-IP,nolock,soft,rw"
+      device: ":/path/to/volumes/nexus/registry"
+</code></pre></div></div>
+
+<p>Se salvou o arquivo com o nome de <code class="language-plaintext highlighter-rouge">registry.yml</code>, suba seu stack com um comando como este:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ docker stack deploy -c registry.yml registry
+</code></pre></div></div>
+
+<p>E depois configure seus repositórios docker (hosted, proxy, group) de acordo com as regras inseridas no traefik.</p>
+
+<h2 id="qual-o-objetivo">Qual o Objetivo?</h2>
+
+<p>O objetivo deste <em>post</em> é detalhar os passos necessários para a entrega de um <em>Docker Registry</em> privado que:</p>
+
+<ul>
+  <li>utilize o Nexus como ferramenta de implementação do Docker Registry;</li>
+  <li>disponibilize <code class="language-plaintext highlighter-rouge">nexus.domain.com</code> como endereço do Nexus;</li>
+  <li>disponibilize <code class="language-plaintext highlighter-rouge">registry.domain.com</code> como endereço do Registry;</li>
+  <li>funcione como um <code class="language-plaintext highlighter-rouge">proxy para o Docker Hub</code>.</li>
+</ul>
+
+<p>Este post assume que você já possua um Cluster Docker Swarm com um Traefik configurado + NFS como persistência para seus volumes.</p>
+
+<h2 id="dockerfile-imagem-do-nexus-para-um-registry">Dockerfile: imagem do Nexus para um Registry</h2>
+
+<p>Este post utilizou a versão <strong>3.16.2</strong> do Nexus, assim como sua respectiva imagem docker para a construção de uma imagem personalizada. De acordo com a <a href="https://hub.docker.com/r/sonatype/nexus3">documentação da imagem oficial</a>, tem-se o serviço Nexus exposto pelo container na porta 8081.</p>
+
+<p>Contudo, precisamos de mais 2 portas expostas e disponíveis que utilizaremos na criação e configuração dos repositórios docker dentro do nexus. Seguindo o padrão, escolhemos as portas:</p>
+
+<ul>
+  <li>8082</li>
+  <li>8083</li>
+</ul>
+
+<p>Abaixo, nosso <em>Dockerfile</em>:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>FROM sonatype/nexus3:3.16.2
+EXPOSE 8081 8082 8083
+</code></pre></div></div>
+
+<p>e os comandos utilizados para o <em>build and push</em> da imagem no <em>Docker Hub</em>:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ docker build --no-cache --rm -t matheuslao/registry-nexus:3.16.2 .
+
+$ docker push matheuslao/registry-nexus:3.16.2
+</code></pre></div></div>
+
+<p>O <em>Dockerfile</em> pode ser consultado no projeto <a href="https://github.com/matheuslao/docker-registry-nexus">minha conta no github</a> e a imagem gerada está disponível no <a href="https://hub.docker.com/r/matheuslao/registry-nexus">Docker Hub</a>.</p>
+
+<h2 id="stack-subindo-o-registry">Stack: Subindo o Registry</h2>
+
+<p>O mais “difícil” aqui é a configuração correta do serviço para/com o <em>Traefik</em>. O resto é configuração rotineira para a subida funcional de um serviço em um <em>Cluster Swarm</em>, além do armazenamento de <em>volumes</em> em um serviço NFS.</p>
+
+<p>Assim, vamos nos atentar principalmente para estas configurações do <em>traefik</em> em nosso <em>service</em>:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>deploy:      
+  labels:        
+    - "traefik.nexus.backend=nexus"
+    - "traefik.nexus.frontend.rule=Host:nexus.domain.com"
+    - "traefik.nexus.frontend.entryPoints=https"
+    - "traefik.nexus.port=8081"
+    - "traefik.registry-write.backend=registry-write"
+    - "traefik.registry-write.frontend.rule=Host:registry.domain.com;Method:PUT,DELETE,POST,PATCH"
+    - "traefik.registry-write.frontend.entryPoints=https"
+    - "traefik.registry-write.port=8083"
+    - "traefik.registry-read.backend=registry-read"
+    - "traefik.registry-read.frontend.rule=Host:registry.domain.com;Method:GET,HEAD"
+    - "traefik.registry-read.frontend.entryPoints=https"
+    - "traefik.registry-read.port=8082"
+
+</code></pre></div></div>
+<p>Basicamente, temos 3 regras com a definição de 3 <em>backend/frontend</em> que o <em>Traefik</em> registrará e fará a gestão do serviço:</p>
+
+<ul>
+  <li>
+    <p>Regra 1 (nexus): receberá requisições https://nexus.domain.com e passará para nosso serviço na porta 8081.</p>
+  </li>
+  <li>
+    <p>Regra 2 (registry-read): receberá requisições https://registry.domain.com do tipos GET e HEAD e passará para o nosso serviço na porta 8082</p>
+  </li>
+  <li>
+    <p>Regra 3 (registry-write): receberá requisições https://registry.domain.com dos tipos POST, PUT, PATCH, DELETE e passará para o nosso serviço na porta 8083.</p>
+  </li>
+</ul>
+
+<p>A necessidade de 2 regras (identificando o tipo de requisição) para o Registry é bem simples:</p>
+
+<ul>
+  <li>
+    <p>quando precisarmos <em>pushar</em> uma imagem, a requisição irá para o repositório privado de imagens no Nexus (configurado com o <em>HTTP Connector</em> 8083);</p>
+  </li>
+  <li>
+    <p>quando precisarmos baixar uma imagem, a requisição irá para um repositório que contem as imagens privadas construídas + acesso ao Docker Hub através de um proxy (repositório este disponível pelo <em>HTTP Connector</em> 8082).</p>
+  </li>
+</ul>
+
+<p>Se salvou o arquivo com o nome de <code class="language-plaintext highlighter-rouge">registry.yml</code>, suba seu stack com um comando como este:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ docker stack deploy -c registry.yml registry
+</code></pre></div></div>
+
+<h2 id="configurandos-os-repositórios-no-nexus">Configurandos os Repositórios no Nexus</h2>
+
+<p>Agora, precisamos acessar a interface do Nexus como administrador e criar 3 repositórios, sendo 1 de cada tipo abaixo:</p>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">docker hosted</code>: armazenará as imagens privadas;</li>
+  <li><code class="language-plaintext highlighter-rouge">docker proxy</code>: permitirá acessar o repositório Docker Hub;</li>
+  <li><code class="language-plaintext highlighter-rouge">docker group</code>: (<em>docker hosted</em> + <em>docker proxy</em>), que permitirá baixarmos imagens de ambos repositórios.</li>
+</ul>
+
+<p>Subindo o stack e acessando sua url <code class="language-plaintext highlighter-rouge">nexus.domain.com</code>, você consegue logar com a conta inicial de admin (user=admin, pass=admin123).</p>
+
+<p>Crie seu repositório privado <code class="language-plaintext highlighter-rouge">docker-private</code>:</p>
+
+<p><img src="https://blog.sonatype.com/hs-fs/hubfs/Imported_Blog_Media/rafael-1.png?width=590&amp;name=rafael-1.png" alt="docker-private-repo" />
+<em>fonte: blog.sonatype.com/hs-fs/hubfs/Imported_Blog_Media/rafael-1.png?width=590&amp;name=rafael-1.png</em></p>
+
+<p>Em seguida, crie seu repositório proxy para o Docker Hub:</p>
+
+<p><img src="https://blog.sonatype.com/hs-fs/hubfs/Imported_Blog_Media/rafael-2.png?width=590&amp;name=rafael-2.png" alt="docker-proxy-repo" />
+<em>fonte: blog.sonatype.com/hs-fs/hubfs/Imported_Blog_Media/rafael-2.png?width=590&amp;name=rafael-2.png</em></p>
+
+<p>E finalmente, crie seu repositório de agrupamento</p>
+
+<p><img src="https://blog.sonatype.com/hs-fs/hubfs/Imported_Blog_Media/rafael-4.png?width=590&amp;name=rafael-4.png" alt="docker-group-repo-01" />
+<em>fonte: blog.sonatype.com/hs-fs/hubfs/Imported_Blog_Media/rafael-4.png?width=590&amp;name=rafael-4.png</em>
+<img src="https://blog.sonatype.com/hs-fs/hubfs/Imported_Blog_Media/rafael6.png?width=590&amp;name=rafael6.png" alt="docker-group-repo-02" />
+<em>fonte: blog.sonatype.com/hs-fs/hubfs/Imported_Blog_Media/rafael6.png?width=590&amp;name=rafael6.png</em></p>
+
+<h2 id="autenticando-se-em-seu-registry">Autenticando-se em seu Registry</h2>
+
+<p>Com os repositórios configurados corretamente, a sua url <code class="language-plaintext highlighter-rouge">https://registry.domain.com</code> já está funcionando e podemos testar.</p>
+
+<p>Você pode executar o seguinte comando em um Docker Host:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ docker login registry.domain.com
+</code></pre></div></div>
+
+<p>E inserir as credenciais de acesso (nome e senha). Utilize, por exemplo o usuário admin do nexus para testes.</p>
+
+<p>Par baixar uma imagem do Docker Hub (hello-world, por exemplo) pelo seu Registry, basta fazer:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ docker pull registry.domain.com/hello-world
+</code></pre></div></div>
+
+<p>E para pushar uma imagem para seu repositório privado, após ter gerado a tag, faça:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ docker push registry.domain.com/minha-image:versao
+</code></pre></div></div>
+
+<p>Bem legal!</p>
+
+<h2 id="referências">Referências</h2>
+
+<ul>
+  <li>https://blog.sonatype.com/using-nexus-3-as-your-repository-part-3-docker-images</li>
+  <li>https://www.terzo.org/creating-a-streamlined-docker-registry-with-sonatype-and-traefik.html</li>
+</ul>]]></content><author><name></name></author><category term="docker" /><category term="nexus" /><category term="traefik" /><category term="swarm" /><category term="registry" /><category term="nfs" /><summary type="html"><![CDATA[Em uma infraestrutura de containerização, possuir um Private Registry Server para o armazenamento e gerenciamento das imagens da empresa é essencial.]]></summary></entry><entry><title type="html">Manifesto iDojo</title><link href="http://0.0.0.0:4000/posts/manifesto-idojo/" rel="alternate" type="text/html" title="Manifesto iDojo" /><published>2019-03-09T20:42:47+00:00</published><updated>2019-03-09T20:42:47+00:00</updated><id>http://0.0.0.0:4000/posts/manifesto-idojo</id><content type="html" xml:base="http://0.0.0.0:4000/posts/manifesto-idojo/"><![CDATA[<p>Encontramos nas Artes Marciais valores que a sociedade precisa. As Artes Marciais,
+mais do que formar atletas, também formam cidadãos de bem. São notórios também os
+benefícios para a saúde, a autoestima e o autoconhecimento.</p>
+
+<p><img src="https://cdn-images-1.medium.com/max/800/1*9REpgwf_g9mFAMelcLGvVQ.png" alt="iDojo image" /></p>
+
+<p>Um dos objetivos do <a href="https://idojo.com.br">iDojo</a> é facilitar a gestão de um
+Centro de Artes Marciais. O desejo é de maximizar o tempo dos professores e administradores,
+que muitas vezes são a mesma pessoa, simplificando a burocracia para que eles tenham
+mais tempo para ensinar e atender mais alunos.</p>
+
+<p>Retornar o investimento para a sociedade faz parte da proposta do iDojo. Desde o
+inicio, apoiamos projetos sociais, decidindo que o sistema seria gratuito para esse
+tipo de iniciativa.</p>
+
+<p>Queremos mais como patrocinar atletas, eventos, projetos e escolas de artes marciais.</p>
+
+<p>Obrigado a vocês que estão embarcando nesse sonho conosco.</p>]]></content><author><name></name></author><category term="idojo" /><category term="empreender" /><category term="startup" /><category term="artes marciais" /><summary type="html"><![CDATA[Encontramos nas Artes Marciais valores que a sociedade precisa. As Artes Marciais, mais do que formar atletas, também formam cidadãos de bem. São notórios também os benefícios para a saúde, a autoestima e o autoconhecimento.]]></summary></entry></feed>
