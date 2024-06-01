@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="">
+
+<head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="ie=edge">
+<link href="https://fonts.googleapis.com/css?family=Merriweather:300|Raleway:400,700" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/style.css">
+<title>Docker Registry com Nexus em um Cluster Swarm + Traefik + NFS</title>
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Docker Registry com Nexus em um Cluster Swarm + Traefik + NFS | matheuslao.dev</title>
+<meta name="generator" content="Jekyll v4.3.3" />
+<meta property="og:title" content="Docker Registry com Nexus em um Cluster Swarm + Traefik + NFS" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Em uma infraestrutura de containerização, possuir um Private Registry Server para o armazenamento e gerenciamento das imagens da empresa é essencial." />
+<meta property="og:description" content="Em uma infraestrutura de containerização, possuir um Private Registry Server para o armazenamento e gerenciamento das imagens da empresa é essencial." />
+<link rel="canonical" href="http://0.0.0.0:4000/posts/docker-registry-com-nexus-cluster-swarm-traefik/" />
+<meta property="og:url" content="http://0.0.0.0:4000/posts/docker-registry-com-nexus-cluster-swarm-traefik/" />
+<meta property="og:site_name" content="matheuslao.dev" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2019-07-07T17:50:17+00:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Docker Registry com Nexus em um Cluster Swarm + Traefik + NFS" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","dateModified":"2019-07-07T17:50:17+00:00","datePublished":"2019-07-07T17:50:17+00:00","description":"Em uma infraestrutura de containerização, possuir um Private Registry Server para o armazenamento e gerenciamento das imagens da empresa é essencial.","headline":"Docker Registry com Nexus em um Cluster Swarm + Traefik + NFS","mainEntityOfPage":{"@type":"WebPage","@id":"http://0.0.0.0:4000/posts/docker-registry-com-nexus-cluster-swarm-traefik/"},"url":"http://0.0.0.0:4000/posts/docker-registry-com-nexus-cluster-swarm-traefik/"}</script>
+<!-- End Jekyll SEO tag -->
+
+
+<script type="text/javascript" src="/assets/js/darkmode.js"></script>
+
+</head><body>
+  <main class="container">
+    <section class="about">
+      <div class="about-header ">
+      <div class="about-title">
+      <a href="/">
+        
+        <img src="/assets/portfolio.png" alt="Matheus Andrade" />
+        
+      </a>
+      <h2 id="title">
+        <a href="/">Matheus Andrade</a>
+      </h2>
+      </div><p class="tagline">DevOps Engineer</p></div>
+      
+      <ul class="social about-footer "><a href="https://github.com/matheuslao" target="_blank">
+          <li>
+            <i class="icon-github-circled"></i>
+          </li>
+        </a><a href="https://www.linkedin.com/in/matheuslao" target="_blank">
+          <li>
+            <i class="icon-linkedin-squared"></i>
+          </li>
+        </a><a href="https://twitter.com/matheuslao" target="_blank">
+          <li>
+            <i class="icon-twitter-squared"></i>
+          </li>
+        </a><a href="https://instagram.com/matheuslao" target="_blank">
+          <li>
+            <i class="icon-instagram"></i>
+          </li>
+        </a><a href=" https://t.me/matheuslao" target="_blank">
+          <li>
+            <i class="icon-telegram"></i>
+          </li>
+        </a></ul><nav class="navigation about-footer ">
+        <ul>
+          
+        </ul>
+      </nav><p class="about-footer ">&copy;
+        2024</p><div class="about-footer ">
+        <p>Dark Mode
+          <i class="icon-moon"></i>
+          <label class="switch">
+            <input type="checkbox" class="dark-mode-toggle">
+            <span class="slider round" onclick="toggleDarkMode()"></span>
+          </label>
+        </p>
+      </div>
+    </section>
+    <section class="content">
+      <div class="post-container">
+  <a class="post-link" href="/posts/docker-registry-com-nexus-cluster-swarm-traefik/">
+    <h2 class="post-title">Docker Registry com Nexus em um Cluster Swarm + Traefik + NFS</h2>
+  </a>
+  <div class="post-meta">
+    <div class="post-date"><i class="icon-calendar"></i>Jul 7, 2019</div><ul class="post-categories"><li>docker</li><li>nexus</li><li>traefik</li><li>swarm</li><li>registry</li><li>nfs</li></ul></div>
+  <div class="post">
+    <p>Em uma infraestrutura de containerização, possuir um <em>Private Registry Server</em> para o armazenamento e gerenciamento das imagens da empresa é essencial.</p>
+
+<p>Quando a empresa está na <em>Cloud</em>, a preocupação é na configuração e utilização da ferramenta, mas quando tem-se uma infraestrutura local (<em>on-premise</em>), precisamos atentar a passos anteriores como instalação e o armazenamentos das imagens.</p>
+
+<p>Antes de continuar, gostaria de deixar um aviso:</p>
+
+<blockquote>
+  <p>A solução apresentada é funcional, contudo este post <strong>não é e nem pretende ser “Estado da Arte”</strong>. Há diversas implementações melhores e mais robustas, tanto a nível de solução quanto a nível de tecnologias e ferramentas! Este post é fruto de estudo e aprendizado, assim fique à vontade para enviar sugestões.</p>
+</blockquote>
+
+<h2 id="tldr">TL;DR</h2>
+
+<p>Para um Docker Registry privado completo (armazenamento de imagens próprias + proxy/cache do Docker Hub), a imagem do Nexus precisa expor 3 portas. Assim, a <a href="https://hub.docker.com/r/matheuslao/registry-nexus">imagem utilizada no <em>stack</em></a> foi feita com um <em>Dockerfile</em>:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>FROM sonatype/nexus3:3.16.2
+EXPOSE 8081 8082 8083
+</code></pre></div></div>
+<p>Assumindo a existência de um <em>Cluster Docker Swarm</em> com o <em>Traefik</em> como <em>Ingress/Reverse Proxy/Load Balancer</em> e <em>NFS</em> como armazenamento dos <em>volumes</em>, o seguinte arquivo representa a stack:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>version: '3.7'
+
+services:
+  nexus:
+    image: matheuslao/registry-nexus:3.16.2
+    volumes:
+      - data:/nexus-data
+    deploy:      
+      labels:        
+        - "traefik.nexus.backend=nexus"
+        - "traefik.nexus.frontend.rule=Host:nexus.domain.com"
+        - "traefik.nexus.frontend.entryPoints=https"
+        - "traefik.nexus.port=8081"
+        - "traefik.registry-write.backend=registry-write"
+        - "traefik.registry-write.frontend.rule=Host:registry.domain.com;Method:PUT,DELETE,POST,PATCH"
+        - "traefik.registry-write.frontend.entryPoints=https"
+        - "traefik.registry-write.port=8083"
+        - "traefik.registry-read.backend=registry-read"
+        - "traefik.registry-read.frontend.rule=Host:registry.domain.com;Method:GET,HEAD"
+        - "traefik.registry-read.frontend.entryPoints=https"
+        - "traefik.registry-read.port=8082"
+
+volumes:
+  data:
+    driver_opts:
+      type: "nfs4"
+      o: "addr=NFS-SERVER-IP,nolock,soft,rw"
+      device: ":/path/to/volumes/nexus/registry"
+</code></pre></div></div>
+
+<p>Se salvou o arquivo com o nome de <code class="language-plaintext highlighter-rouge">registry.yml</code>, suba seu stack com um comando como este:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ docker stack deploy -c registry.yml registry
+</code></pre></div></div>
+
+<p>E depois configure seus repositórios docker (hosted, proxy, group) de acordo com as regras inseridas no traefik.</p>
+
+<h2 id="qual-o-objetivo">Qual o Objetivo?</h2>
+
+<p>O objetivo deste <em>post</em> é detalhar os passos necessários para a entrega de um <em>Docker Registry</em> privado que:</p>
+
+<ul>
+  <li>utilize o Nexus como ferramenta de implementação do Docker Registry;</li>
+  <li>disponibilize <code class="language-plaintext highlighter-rouge">nexus.domain.com</code> como endereço do Nexus;</li>
+  <li>disponibilize <code class="language-plaintext highlighter-rouge">registry.domain.com</code> como endereço do Registry;</li>
+  <li>funcione como um <code class="language-plaintext highlighter-rouge">proxy para o Docker Hub</code>.</li>
+</ul>
+
+<p>Este post assume que você já possua um Cluster Docker Swarm com um Traefik configurado + NFS como persistência para seus volumes.</p>
+
+<h2 id="dockerfile-imagem-do-nexus-para-um-registry">Dockerfile: imagem do Nexus para um Registry</h2>
+
+<p>Este post utilizou a versão <strong>3.16.2</strong> do Nexus, assim como sua respectiva imagem docker para a construção de uma imagem personalizada. De acordo com a <a href="https://hub.docker.com/r/sonatype/nexus3">documentação da imagem oficial</a>, tem-se o serviço Nexus exposto pelo container na porta 8081.</p>
+
+<p>Contudo, precisamos de mais 2 portas expostas e disponíveis que utilizaremos na criação e configuração dos repositórios docker dentro do nexus. Seguindo o padrão, escolhemos as portas:</p>
+
+<ul>
+  <li>8082</li>
+  <li>8083</li>
+</ul>
+
+<p>Abaixo, nosso <em>Dockerfile</em>:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>FROM sonatype/nexus3:3.16.2
+EXPOSE 8081 8082 8083
+</code></pre></div></div>
+
+<p>e os comandos utilizados para o <em>build and push</em> da imagem no <em>Docker Hub</em>:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ docker build --no-cache --rm -t matheuslao/registry-nexus:3.16.2 .
+
+$ docker push matheuslao/registry-nexus:3.16.2
+</code></pre></div></div>
+
+<p>O <em>Dockerfile</em> pode ser consultado no projeto <a href="https://github.com/matheuslao/docker-registry-nexus">minha conta no github</a> e a imagem gerada está disponível no <a href="https://hub.docker.com/r/matheuslao/registry-nexus">Docker Hub</a>.</p>
+
+<h2 id="stack-subindo-o-registry">Stack: Subindo o Registry</h2>
+
+<p>O mais “difícil” aqui é a configuração correta do serviço para/com o <em>Traefik</em>. O resto é configuração rotineira para a subida funcional de um serviço em um <em>Cluster Swarm</em>, além do armazenamento de <em>volumes</em> em um serviço NFS.</p>
+
+<p>Assim, vamos nos atentar principalmente para estas configurações do <em>traefik</em> em nosso <em>service</em>:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>deploy:      
+  labels:        
+    - "traefik.nexus.backend=nexus"
+    - "traefik.nexus.frontend.rule=Host:nexus.domain.com"
+    - "traefik.nexus.frontend.entryPoints=https"
+    - "traefik.nexus.port=8081"
+    - "traefik.registry-write.backend=registry-write"
+    - "traefik.registry-write.frontend.rule=Host:registry.domain.com;Method:PUT,DELETE,POST,PATCH"
+    - "traefik.registry-write.frontend.entryPoints=https"
+    - "traefik.registry-write.port=8083"
+    - "traefik.registry-read.backend=registry-read"
+    - "traefik.registry-read.frontend.rule=Host:registry.domain.com;Method:GET,HEAD"
+    - "traefik.registry-read.frontend.entryPoints=https"
+    - "traefik.registry-read.port=8082"
+
+</code></pre></div></div>
+<p>Basicamente, temos 3 regras com a definição de 3 <em>backend/frontend</em> que o <em>Traefik</em> registrará e fará a gestão do serviço:</p>
+
+<ul>
+  <li>
+    <p>Regra 1 (nexus): receberá requisições https://nexus.domain.com e passará para nosso serviço na porta 8081.</p>
+  </li>
+  <li>
+    <p>Regra 2 (registry-read): receberá requisições https://registry.domain.com do tipos GET e HEAD e passará para o nosso serviço na porta 8082</p>
+  </li>
+  <li>
+    <p>Regra 3 (registry-write): receberá requisições https://registry.domain.com dos tipos POST, PUT, PATCH, DELETE e passará para o nosso serviço na porta 8083.</p>
+  </li>
+</ul>
+
+<p>A necessidade de 2 regras (identificando o tipo de requisição) para o Registry é bem simples:</p>
+
+<ul>
+  <li>
+    <p>quando precisarmos <em>pushar</em> uma imagem, a requisição irá para o repositório privado de imagens no Nexus (configurado com o <em>HTTP Connector</em> 8083);</p>
+  </li>
+  <li>
+    <p>quando precisarmos baixar uma imagem, a requisição irá para um repositório que contem as imagens privadas construídas + acesso ao Docker Hub através de um proxy (repositório este disponível pelo <em>HTTP Connector</em> 8082).</p>
+  </li>
+</ul>
+
+<p>Se salvou o arquivo com o nome de <code class="language-plaintext highlighter-rouge">registry.yml</code>, suba seu stack com um comando como este:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ docker stack deploy -c registry.yml registry
+</code></pre></div></div>
+
+<h2 id="configurandos-os-repositórios-no-nexus">Configurandos os Repositórios no Nexus</h2>
+
+<p>Agora, precisamos acessar a interface do Nexus como administrador e criar 3 repositórios, sendo 1 de cada tipo abaixo:</p>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">docker hosted</code>: armazenará as imagens privadas;</li>
+  <li><code class="language-plaintext highlighter-rouge">docker proxy</code>: permitirá acessar o repositório Docker Hub;</li>
+  <li><code class="language-plaintext highlighter-rouge">docker group</code>: (<em>docker hosted</em> + <em>docker proxy</em>), que permitirá baixarmos imagens de ambos repositórios.</li>
+</ul>
+
+<p>Subindo o stack e acessando sua url <code class="language-plaintext highlighter-rouge">nexus.domain.com</code>, você consegue logar com a conta inicial de admin (user=admin, pass=admin123).</p>
+
+<p>Crie seu repositório privado <code class="language-plaintext highlighter-rouge">docker-private</code>:</p>
+
+<p><img src="https://blog.sonatype.com/hs-fs/hubfs/Imported_Blog_Media/rafael-1.png?width=590&amp;name=rafael-1.png" alt="docker-private-repo" />
+<em>fonte: blog.sonatype.com/hs-fs/hubfs/Imported_Blog_Media/rafael-1.png?width=590&amp;name=rafael-1.png</em></p>
+
+<p>Em seguida, crie seu repositório proxy para o Docker Hub:</p>
+
+<p><img src="https://blog.sonatype.com/hs-fs/hubfs/Imported_Blog_Media/rafael-2.png?width=590&amp;name=rafael-2.png" alt="docker-proxy-repo" />
+<em>fonte: blog.sonatype.com/hs-fs/hubfs/Imported_Blog_Media/rafael-2.png?width=590&amp;name=rafael-2.png</em></p>
+
+<p>E finalmente, crie seu repositório de agrupamento</p>
+
+<p><img src="https://blog.sonatype.com/hs-fs/hubfs/Imported_Blog_Media/rafael-4.png?width=590&amp;name=rafael-4.png" alt="docker-group-repo-01" />
+<em>fonte: blog.sonatype.com/hs-fs/hubfs/Imported_Blog_Media/rafael-4.png?width=590&amp;name=rafael-4.png</em>
+<img src="https://blog.sonatype.com/hs-fs/hubfs/Imported_Blog_Media/rafael6.png?width=590&amp;name=rafael6.png" alt="docker-group-repo-02" />
+<em>fonte: blog.sonatype.com/hs-fs/hubfs/Imported_Blog_Media/rafael6.png?width=590&amp;name=rafael6.png</em></p>
+
+<h2 id="autenticando-se-em-seu-registry">Autenticando-se em seu Registry</h2>
+
+<p>Com os repositórios configurados corretamente, a sua url <code class="language-plaintext highlighter-rouge">https://registry.domain.com</code> já está funcionando e podemos testar.</p>
+
+<p>Você pode executar o seguinte comando em um Docker Host:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ docker login registry.domain.com
+</code></pre></div></div>
+
+<p>E inserir as credenciais de acesso (nome e senha). Utilize, por exemplo o usuário admin do nexus para testes.</p>
+
+<p>Par baixar uma imagem do Docker Hub (hello-world, por exemplo) pelo seu Registry, basta fazer:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ docker pull registry.domain.com/hello-world
+</code></pre></div></div>
+
+<p>E para pushar uma imagem para seu repositório privado, após ter gerado a tag, faça:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ docker push registry.domain.com/minha-image:versao
+</code></pre></div></div>
+
+<p>Bem legal!</p>
+
+<h2 id="referências">Referências</h2>
+
+<ul>
+  <li>https://blog.sonatype.com/using-nexus-3-as-your-repository-part-3-docker-images</li>
+  <li>https://www.terzo.org/creating-a-streamlined-docker-registry-with-sonatype-and-traefik.html</li>
+</ul>
+
+
+  </div><div id="disqus_thread" style="margin-top:25px"></div>
+  <script>
+    var disqus_config = function () {
+      this.page.url = 'http://0.0.0.0:4000/posts/docker-registry-com-nexus-cluster-swarm-traefik/';
+      this.page.identifier = 'http://0.0.0.0:4000/posts/docker-registry-com-nexus-cluster-swarm-traefik/';
+    };
+    (function () {
+      var d = document, s = d.createElement('script');
+      s.src = 'https://matheuslao.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments
+      powered by Disqus.</a></noscript></div>
+
+    </section>
+    <footer class="">
+      <ul class="social about-footer "><a href="https://github.com/matheuslao" target="_blank">
+          <li>
+            <i class="icon-github-circled"></i>
+          </li>
+        </a><a href="https://www.linkedin.com/in/matheuslao" target="_blank">
+          <li>
+            <i class="icon-linkedin-squared"></i>
+          </li>
+        </a><a href="https://twitter.com/matheuslao" target="_blank">
+          <li>
+            <i class="icon-twitter-squared"></i>
+          </li>
+        </a><a href="https://instagram.com/matheuslao" target="_blank">
+          <li>
+            <i class="icon-instagram"></i>
+          </li>
+        </a><a href=" https://t.me/matheuslao" target="_blank">
+          <li>
+            <i class="icon-telegram"></i>
+          </li>
+        </a></ul><nav class="navigation about-footer ">
+        <ul>
+          
+        </ul>
+      </nav><p class="about-footer ">&copy;
+        2024</p><div class="about-footer ">
+        <p>Dark Mode
+          <i class="icon-moon"></i>
+          <label class="switch">
+            <input type="checkbox" class="dark-mode-toggle">
+            <span class="slider round" onclick="toggleDarkMode()"></span>
+          </label>
+        </p>
+      </div>
+    </footer>
+  </main>
+  
+  <script type="text/javascript" src="/assets/js/darkmode.js"></script>
+  
+  <script src="/assets/js/simple-jekyll-search.min.js"></script>
+  <script src="/assets/js/search.js"></script>
+  
+</body>
+
+</html>

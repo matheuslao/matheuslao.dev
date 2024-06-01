@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="">
+
+<head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="ie=edge">
+<link href="https://fonts.googleapis.com/css?family=Merriweather:300|Raleway:400,700" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/style.css">
+<title>Personalizando o Local de Instalação do Linux no WSL2</title>
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Personalizando o Local de Instalação do Linux no WSL2 | matheuslao.dev</title>
+<meta name="generator" content="Jekyll v4.3.3" />
+<meta property="og:title" content="Personalizando o Local de Instalação do Linux no WSL2" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Para você que, assim como eu, está usando o WSL2 e deseja possuir várias instâncias Linux rodando no Windows, além de, claro, organizar melhor o local de instalação, este post pode lhe ajudar." />
+<meta property="og:description" content="Para você que, assim como eu, está usando o WSL2 e deseja possuir várias instâncias Linux rodando no Windows, além de, claro, organizar melhor o local de instalação, este post pode lhe ajudar." />
+<link rel="canonical" href="http://0.0.0.0:4000/posts/personalizando-local-instalacao-distro-linux-wsl2/" />
+<meta property="og:url" content="http://0.0.0.0:4000/posts/personalizando-local-instalacao-distro-linux-wsl2/" />
+<meta property="og:site_name" content="matheuslao.dev" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-10-09T01:18:03+00:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Personalizando o Local de Instalação do Linux no WSL2" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","dateModified":"2020-10-09T01:18:03+00:00","datePublished":"2020-10-09T01:18:03+00:00","description":"Para você que, assim como eu, está usando o WSL2 e deseja possuir várias instâncias Linux rodando no Windows, além de, claro, organizar melhor o local de instalação, este post pode lhe ajudar.","headline":"Personalizando o Local de Instalação do Linux no WSL2","mainEntityOfPage":{"@type":"WebPage","@id":"http://0.0.0.0:4000/posts/personalizando-local-instalacao-distro-linux-wsl2/"},"url":"http://0.0.0.0:4000/posts/personalizando-local-instalacao-distro-linux-wsl2/"}</script>
+<!-- End Jekyll SEO tag -->
+
+
+<script type="text/javascript" src="/assets/js/darkmode.js"></script>
+
+</head><body>
+  <main class="container">
+    <section class="about">
+      <div class="about-header ">
+      <div class="about-title">
+      <a href="/">
+        
+        <img src="/assets/portfolio.png" alt="Matheus Andrade" />
+        
+      </a>
+      <h2 id="title">
+        <a href="/">Matheus Andrade</a>
+      </h2>
+      </div><p class="tagline">DevOps Engineer</p></div>
+      
+      <ul class="social about-footer "><a href="https://github.com/matheuslao" target="_blank">
+          <li>
+            <i class="icon-github-circled"></i>
+          </li>
+        </a><a href="https://www.linkedin.com/in/matheuslao" target="_blank">
+          <li>
+            <i class="icon-linkedin-squared"></i>
+          </li>
+        </a><a href="https://twitter.com/matheuslao" target="_blank">
+          <li>
+            <i class="icon-twitter-squared"></i>
+          </li>
+        </a><a href="https://instagram.com/matheuslao" target="_blank">
+          <li>
+            <i class="icon-instagram"></i>
+          </li>
+        </a><a href=" https://t.me/matheuslao" target="_blank">
+          <li>
+            <i class="icon-telegram"></i>
+          </li>
+        </a></ul><nav class="navigation about-footer ">
+        <ul>
+          
+        </ul>
+      </nav><p class="about-footer ">&copy;
+        2024</p><div class="about-footer ">
+        <p>Dark Mode
+          <i class="icon-moon"></i>
+          <label class="switch">
+            <input type="checkbox" class="dark-mode-toggle">
+            <span class="slider round" onclick="toggleDarkMode()"></span>
+          </label>
+        </p>
+      </div>
+    </section>
+    <section class="content">
+      <div class="post-container">
+  <a class="post-link" href="/posts/personalizando-local-instalacao-distro-linux-wsl2/">
+    <h2 class="post-title">Personalizando o Local de Instalação do Linux no WSL2</h2>
+  </a>
+  <div class="post-meta">
+    <div class="post-date"><i class="icon-calendar"></i>Oct 9, 2020</div><ul class="post-categories"><li>linux</li><li>ubuntu</li><li>WSL2</li><li>windows</li><li>wsl</li></ul></div>
+  <div class="post">
+    <p>Para você que, assim como eu, está usando o WSL2 e deseja possuir várias instâncias Linux rodando no Windows, além de, claro, organizar melhor o local de instalação, este post pode lhe ajudar.</p>
+
+<p>Se você ainda não conhece o <strong>WSL2</strong>, dá uma olhada na <a href="https://docs.microsoft.com/pt-br/windows/wsl/">documentação oficial</a> da própria Microsoft, além de vídeos e posts na internet. Ao instalar e começar a usar, este post poderá ser útil para você.</p>
+
+<p>Irei exemplificar com a instalação do Ubuntu.</p>
+
+<h2 id="instalando-ubuntu">Instalando Ubuntu</h2>
+
+<p>A instalação é simples como manda a documentação oficial. Acessando a <strong>Microsoft Store</strong> a partir de seu computador, pesquise por Ubuntu, escolha a versão e apenas clique em <strong>Obter</strong>:</p>
+
+<p><img src="https://raw.githubusercontent.com/matheuslao/matheuslao.dev/main/static/img/personalizando-local-instalacao-distro-linux-wsl2/01.png" alt="instalando-ubuntu-store" /></p>
+
+<p>Após o download, ainda na mesma janela do produto na Microsoft Store, clique em <strong>Iniciar</strong> para a instalação e configuração inicial do sistema, com a criação do usuário:</p>
+
+<p><img src="https://raw.githubusercontent.com/matheuslao/matheuslao.dev/main/static/img/personalizando-local-instalacao-distro-linux-wsl2/02.png" alt="iniciando-ubuntu-store" /></p>
+
+<p>Após a criação do usuário, você já possui o Ubuntu instalado. Feche a Microsoft Store e deslogue-se do Ubuntu (um <em>exit</em> no terminal, por exemplo).</p>
+
+<p>Em um terminal Windows com acesso ao utilitário <strong>wsl</strong>, verifique que a instalação do Ubuntu está presente e registrada no wsl com o comando abaixo:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>wsl -l -v
+</code></pre></div></div>
+
+<p><img src="https://raw.githubusercontent.com/matheuslao/matheuslao.dev/main/static/img/personalizando-local-instalacao-distro-linux-wsl2/03.png" alt="ubuntu-instalado" /></p>
+
+<h2 id="desfazendo-o-registro-do-ubuntu-e-exportando-disco">Desfazendo o Registro do Ubuntu e exportando disco</h2>
+
+<p>Desligue o Ubuntu:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>wsl --shutdown Ubuntu-20.04
+</code></pre></div></div>
+
+<p>Exporte o disco para um local no formato “.tar”:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>wsl --export Ubuntu-20.04 D:\foo.tar
+</code></pre></div></div>
+
+<p>Agora, descadastre a distribuição do WSL:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>wsl --unregister Ubuntu-20.04
+</code></pre></div></div>
+
+<p><img src="https://raw.githubusercontent.com/matheuslao/matheuslao.dev/main/static/img/personalizando-local-instalacao-distro-linux-wsl2/04.png" alt="ubuntu-descadastrado-disco-exportado" /></p>
+
+<h2 id="fazendo-um-novo-registro-no-wsl-a-partir-do-disco-exportado">Fazendo um novo Registro no WSL a partir do disco exportado</h2>
+
+<p>Importe no WSL o disco exportado anteriormente, definindo um novo nome para a Distribuição, assim como o local de instalação:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>wsl --import ubuntu D:\virtual_machines\WSL2\ubuntu d:\foo.tar
+</code></pre></div></div>
+
+<p><img src="https://raw.githubusercontent.com/matheuslao/matheuslao.dev/main/static/img/personalizando-local-instalacao-distro-linux-wsl2/05.png" alt="novo-ubuntu-importado-a-partir-do-disco" /></p>
+
+<p>Verifique que o disco está no lugar que queremos:</p>
+
+<p><img src="https://raw.githubusercontent.com/matheuslao/matheuslao.dev/main/static/img/personalizando-local-instalacao-distro-linux-wsl2/06.png" alt="windows-explorer-novo-local" /></p>
+
+<p>Voilá!</p>
+
+  </div><div id="disqus_thread" style="margin-top:25px"></div>
+  <script>
+    var disqus_config = function () {
+      this.page.url = 'http://0.0.0.0:4000/posts/personalizando-local-instalacao-distro-linux-wsl2/';
+      this.page.identifier = 'http://0.0.0.0:4000/posts/personalizando-local-instalacao-distro-linux-wsl2/';
+    };
+    (function () {
+      var d = document, s = d.createElement('script');
+      s.src = 'https://matheuslao.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments
+      powered by Disqus.</a></noscript></div>
+
+    </section>
+    <footer class="">
+      <ul class="social about-footer "><a href="https://github.com/matheuslao" target="_blank">
+          <li>
+            <i class="icon-github-circled"></i>
+          </li>
+        </a><a href="https://www.linkedin.com/in/matheuslao" target="_blank">
+          <li>
+            <i class="icon-linkedin-squared"></i>
+          </li>
+        </a><a href="https://twitter.com/matheuslao" target="_blank">
+          <li>
+            <i class="icon-twitter-squared"></i>
+          </li>
+        </a><a href="https://instagram.com/matheuslao" target="_blank">
+          <li>
+            <i class="icon-instagram"></i>
+          </li>
+        </a><a href=" https://t.me/matheuslao" target="_blank">
+          <li>
+            <i class="icon-telegram"></i>
+          </li>
+        </a></ul><nav class="navigation about-footer ">
+        <ul>
+          
+        </ul>
+      </nav><p class="about-footer ">&copy;
+        2024</p><div class="about-footer ">
+        <p>Dark Mode
+          <i class="icon-moon"></i>
+          <label class="switch">
+            <input type="checkbox" class="dark-mode-toggle">
+            <span class="slider round" onclick="toggleDarkMode()"></span>
+          </label>
+        </p>
+      </div>
+    </footer>
+  </main>
+  
+  <script type="text/javascript" src="/assets/js/darkmode.js"></script>
+  
+  <script src="/assets/js/simple-jekyll-search.min.js"></script>
+  <script src="/assets/js/search.js"></script>
+  
+</body>
+
+</html>

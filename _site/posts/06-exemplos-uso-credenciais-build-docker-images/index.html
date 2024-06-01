@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="">
+
+<head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="ie=edge">
+<link href="https://fonts.googleapis.com/css?family=Merriweather:300|Raleway:400,700" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/style.css">
+<title>06 Exemplos de Uso de Credenciais (04 não recomendadas) durante o Build de Imagens Docker</title>
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>06 Exemplos de Uso de Credenciais (04 não recomendadas) durante o Build de Imagens Docker | matheuslao.dev</title>
+<meta name="generator" content="Jekyll v4.3.3" />
+<meta property="og:title" content="06 Exemplos de Uso de Credenciais (04 não recomendadas) durante o Build de Imagens Docker" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Em quase todo o processo de construção de imagens Docker, há a necessidade de baixar artefatos (ex: zip, war, jar, etc.) de alguma URL para compor a imagem de nossa aplicação. Por vezes, estas URLs exigem autenticação e precisamos de credenciais para ter acesso ao conteúdo." />
+<meta property="og:description" content="Em quase todo o processo de construção de imagens Docker, há a necessidade de baixar artefatos (ex: zip, war, jar, etc.) de alguma URL para compor a imagem de nossa aplicação. Por vezes, estas URLs exigem autenticação e precisamos de credenciais para ter acesso ao conteúdo." />
+<link rel="canonical" href="http://0.0.0.0:4000/posts/06-exemplos-uso-credenciais-build-docker-images/" />
+<meta property="og:url" content="http://0.0.0.0:4000/posts/06-exemplos-uso-credenciais-build-docker-images/" />
+<meta property="og:site_name" content="matheuslao.dev" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-12-23T15:30:18+00:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="06 Exemplos de Uso de Credenciais (04 não recomendadas) durante o Build de Imagens Docker" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","dateModified":"2020-12-23T15:30:18+00:00","datePublished":"2020-12-23T15:30:18+00:00","description":"Em quase todo o processo de construção de imagens Docker, há a necessidade de baixar artefatos (ex: zip, war, jar, etc.) de alguma URL para compor a imagem de nossa aplicação. Por vezes, estas URLs exigem autenticação e precisamos de credenciais para ter acesso ao conteúdo.","headline":"06 Exemplos de Uso de Credenciais (04 não recomendadas) durante o Build de Imagens Docker","mainEntityOfPage":{"@type":"WebPage","@id":"http://0.0.0.0:4000/posts/06-exemplos-uso-credenciais-build-docker-images/"},"url":"http://0.0.0.0:4000/posts/06-exemplos-uso-credenciais-build-docker-images/"}</script>
+<!-- End Jekyll SEO tag -->
+
+
+<script type="text/javascript" src="/assets/js/darkmode.js"></script>
+
+</head><body>
+  <main class="container">
+    <section class="about">
+      <div class="about-header ">
+      <div class="about-title">
+      <a href="/">
+        
+        <img src="/assets/portfolio.png" alt="Matheus Andrade" />
+        
+      </a>
+      <h2 id="title">
+        <a href="/">Matheus Andrade</a>
+      </h2>
+      </div><p class="tagline">DevOps Engineer</p></div>
+      
+      <ul class="social about-footer "><a href="https://github.com/matheuslao" target="_blank">
+          <li>
+            <i class="icon-github-circled"></i>
+          </li>
+        </a><a href="https://www.linkedin.com/in/matheuslao" target="_blank">
+          <li>
+            <i class="icon-linkedin-squared"></i>
+          </li>
+        </a><a href="https://twitter.com/matheuslao" target="_blank">
+          <li>
+            <i class="icon-twitter-squared"></i>
+          </li>
+        </a><a href="https://instagram.com/matheuslao" target="_blank">
+          <li>
+            <i class="icon-instagram"></i>
+          </li>
+        </a><a href=" https://t.me/matheuslao" target="_blank">
+          <li>
+            <i class="icon-telegram"></i>
+          </li>
+        </a></ul><nav class="navigation about-footer ">
+        <ul>
+          
+        </ul>
+      </nav><p class="about-footer ">&copy;
+        2024</p><div class="about-footer ">
+        <p>Dark Mode
+          <i class="icon-moon"></i>
+          <label class="switch">
+            <input type="checkbox" class="dark-mode-toggle">
+            <span class="slider round" onclick="toggleDarkMode()"></span>
+          </label>
+        </p>
+      </div>
+    </section>
+    <section class="content">
+      <div class="post-container">
+  <a class="post-link" href="/posts/06-exemplos-uso-credenciais-build-docker-images/">
+    <h2 class="post-title">06 Exemplos de Uso de Credenciais (04 não recomendadas) durante o Build de Imagens Docker</h2>
+  </a>
+  <div class="post-meta">
+    <div class="post-date"><i class="icon-calendar"></i>Dec 23, 2020</div><ul class="post-categories"><li>docker</li><li>dockerfile</li><li>multistage build</li></ul></div>
+  <div class="post">
+    <p>Em quase todo o processo de construção de imagens Docker, há a necessidade de baixar artefatos (ex: zip, war, jar, etc.) de alguma URL para compor a imagem de nossa aplicação. Por vezes, estas URLs exigem autenticação e precisamos de credenciais para ter acesso ao conteúdo.</p>
+
+<p><strong>Como construir imagens Docker sem comprometer credenciais, como usuários e senhas de acesso?</strong></p>
+
+<p>Os exemplos abaixo seguirão uma ordem, aparentemente natural de boas práticas, onde há uma preocupação em não expor informação sensível na imagem Docker gerada, além de continuar garantindo sua portabilidade.</p>
+
+<h3 id="o-desafio-contextualizando-a-situação">O Desafio: Contextualizando a situação</h3>
+
+<p>Suponha que tenhamos a missão de construir a imagem de uma simples aplicação Java, cujo artefato <em>buildado</em> encontra-se disponível em uma URL que é o repositório de artefatos de sua empresa. (https://artefatos.empresa.com.br/)</p>
+
+<p>Detalhe 01 : a URL do repositório exige autenticação e você possui as credenciais de acesso.</p>
+
+<p>Detalhe 02 : a imagem será compatilhada para outras empresas/clientes implantarem a aplicação.</p>
+
+<h3 id="exemplo-01-codando-na-mão-grande-as-credenciais">Exemplo 01: Codando “na mão grande” as credenciais</h3>
+
+<p>Eu nem deveria começar por este exemplo, porque acredito que ninguém deve fazer assim. Contudo, vamos evoluindo exemplo a exemplo. Analisemos o <em>Dockerfile</em> abaixo:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>FROM alpine
+WORKDIR /
+RUN apk add curl
+RUN curl <span class="nt">-u</span> francisco:abc123 <span class="nt">-o</span> app.jar <span class="s2">"https://artefatos.empresa.com.br/app-1.2.3.jar"</span>
+ENTRYPOINT <span class="o">[</span><span class="s2">"java"</span>, <span class="s2">"-XX:+UnlockExperimentalVMOptions"</span>, <span class="s2">"-Djava.security.egd=file:/dev/./urandom"</span>,<span class="s2">"-jar"</span>,<span class="s2">"app.jar"</span><span class="o">]</span>
+</code></pre></div></div>
+
+<p>Se preocupe somente com a segunda linha da intrução <code class="language-plaintext highlighter-rouge">RUN</code>, onde foi escrito literalmente as credenciais de acesso. Nem preciso dizer que isso aqui é <strong>bem ruim</strong>, não é? Mas vamos <em>buildar</em> a imagem e taguear com uma versão:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>docker build <span class="nt">-t</span> app:01 <span class="nb">.</span>
+</code></pre></div></div>
+
+<p>A partir da imagem gerada (e que será distribuída para outras pessoas), façamos uma inspeção:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>docker image <span class="nb">history </span>app:01
+</code></pre></div></div>
+
+<p>Está lá, para todo o mundo ver, as credenciais de acesso:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>IMAGE          CREATED         CREATED BY                                      SIZE      COMMENT
+e4d60e8650d7   2 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  ENTRYPOINT ["java" "-XX:+…   0B</span>
+68e3c9068540   2 minutes ago   /bin/sh <span class="nt">-c</span> curl <span class="nt">-u</span> francisco:abc123 <span class="nt">-o</span> app.j…   1.23kB
+c1a9701b7132   5 minutes ago   /bin/sh <span class="nt">-c</span> apk add curl                         3.1MB
+c44f6da443d7   5 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop) WORKDIR /                     0B</span>
+389fef711851   6 days ago      /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  CMD ["/bin/sh"]              0B</span>
+&lt;missing&gt;      6 days ago      /bin/sh <span class="nt">-c</span> <span class="c">#(nop) ADD file:ec475c2abb2d46435…   5.58MB</span>
+</code></pre></div></div>
+
+<h3 id="exemplo-02-usando-envs-para-as-credenciais">Exemplo 02: Usando ENVs para as credenciais</h3>
+
+<p>Uma evolução do exemplo acima, seria a tentativa de <em>buildar</em> a imagem com a utilização de <em>ENVs</em>. Segue o <em>Dockerfile</em>:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>FROM alpine
+ENV USER francisco
+ENV PASSWORD abc123
+WORKDIR /
+RUN apk add curl
+RUN curl <span class="nt">-u</span> <span class="nv">$USER</span>:<span class="nv">$PASSWORD</span> <span class="nt">-o</span> app.jar <span class="s2">"https://artefatos.empresa.com.br/app-1.2.3.jar"</span>
+ENTRYPOINT <span class="o">[</span><span class="s2">"java"</span>, <span class="s2">"-XX:+UnlockExperimentalVMOptions"</span>, <span class="s2">"-Djava.security.egd=file:/dev/./urandom"</span>,<span class="s2">"-jar"</span>,<span class="s2">"app.jar"</span><span class="o">]</span>
+</code></pre></div></div>
+
+<p>Possa ser que você ache que agora não vai persistir as credenciais de acesso, pois leu que a <a href="https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#minimize-the-number-of-layers">instrução ENV não cria layer na imagem</a>. Vamos conferir?</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>docker build <span class="nt">-t</span> app:02 <span class="nb">.</span>
+</code></pre></div></div>
+
+<p>Inspecionando a imagem com o comando <code class="language-plaintext highlighter-rouge">docker image inspect app:02</code>:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">[</span>...]
+ <span class="s2">"Config"</span>: <span class="o">{</span>
+            <span class="s2">"Hostname"</span>: <span class="s2">""</span>,
+            <span class="s2">"Domainname"</span>: <span class="s2">""</span>,
+            <span class="s2">"User"</span>: <span class="s2">""</span>,
+            <span class="s2">"AttachStdin"</span>: <span class="nb">false</span>,
+            <span class="s2">"AttachStdout"</span>: <span class="nb">false</span>,
+            <span class="s2">"AttachStderr"</span>: <span class="nb">false</span>,
+            <span class="s2">"Tty"</span>: <span class="nb">false</span>,
+            <span class="s2">"OpenStdin"</span>: <span class="nb">false</span>,
+            <span class="s2">"StdinOnce"</span>: <span class="nb">false</span>,
+            <span class="s2">"Env"</span>: <span class="o">[</span>
+                <span class="s2">"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"</span>,
+                <span class="s2">"USER=francisco"</span>,
+                <span class="s2">"PASSWORD=abc123"</span>
+            <span class="o">]</span>,
+            <span class="s2">"Cmd"</span>: null,
+<span class="o">[</span>...]
+</code></pre></div></div>
+
+<p>E com o mesmo comando do exemplo anterior <code class="language-plaintext highlighter-rouge">docker image history</code>:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>IMAGE          CREATED         CREATED BY                                      SIZE      COMMENT
+284ee6fffad5   3 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  ENTRYPOINT ["java" "-XX:+…"   0B</span>
+904ec10bf219   3 minutes ago   /bin/sh <span class="nt">-c</span> curl <span class="nt">-u</span> <span class="nv">$USER</span>:<span class="nv">$PASSWORD</span> <span class="nt">-o</span> app.ja…   14B
+cc4d45436465   3 minutes ago   /bin/sh <span class="nt">-c</span> apk add curl                         3.1MB
+35e0fe7f8c92   3 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop) WORKDIR /                     0B</span>
+51c378578679   3 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  ENV PASSWORD=abc123          0B</span>
+9ab41a3c7fa5   3 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  ENV USER=francisco           0B</span>
+389fef711851   6 days ago      /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  CMD ["/bin/sh"]              0B</span>
+&lt;missing&gt;      6 days ago      /bin/sh <span class="nt">-c</span> <span class="c">#(nop) ADD file:ec475c2abb2d46435…   5.58MB</span>
+</code></pre></div></div>
+
+<p>Abordarei em outro post, com mais detalhes, as questões de quando <code class="language-plaintext highlighter-rouge">layers</code> são geradas ou não. Por enquanto, nos atentemos que é possível a identificação/visualização das credencenciais com a inspeção da imagem gerada.</p>
+
+<h3 id="código-03-usando-variáveis-de-ambiente-e-run-em-uma-mesma-layer">Código 03: Usando variáveis de ambiente e RUN em uma mesma LAYER</h3>
+
+<p>Nova ideia: utilizar variáveis de ambiente junto instrução RUN para a construção de uma única camada (layer) da imagem. O novo Dockerfile ficaria assim:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>FROM alpine
+WORKDIR /
+RUN apk add curl
+RUN <span class="nb">export </span><span class="nv">USER</span><span class="o">=</span><span class="s2">"francisco"</span> <span class="se">\</span>
+    <span class="o">&amp;&amp;</span> <span class="nb">export </span><span class="nv">PASSWORD</span><span class="o">=</span><span class="s2">"abc123"</span> <span class="se">\</span>
+    <span class="o">&amp;&amp;</span> curl <span class="nt">-u</span> <span class="nv">$USER</span>:<span class="nv">$PASSWORD</span> <span class="nt">-o</span> app.jar <span class="s2">"https://artefatos.empresa.com.br/app-1.2.3.jar"</span>
+ENTRYPOINT <span class="o">[</span><span class="s2">"java"</span>, <span class="s2">"-XX:+UnlockExperimentalVMOptions"</span>, <span class="s2">"-Djava.security.egd=file:/dev/./urandom"</span>,<span class="s2">"-jar"</span>,<span class="s2">"app.jar"</span><span class="o">]</span>
+</code></pre></div></div>
+
+<p>Gerando versão 03 da aplicação:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>docker build <span class="nt">-t</span> app:03
+</code></pre></div></div>
+
+<p>E vamos conferir o resultado, analisando a imagem gerada com o <code class="language-plaintext highlighter-rouge">docker image history</code>:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>IMAGE          CREATED          CREATED BY                                      SIZE      COMMENT
+406c7ce82cf0   37 seconds ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  ENTRYPOINT ["java" "-XX:+…   0B</span>
+325c0a507c68   37 seconds ago   /bin/sh <span class="nt">-c</span> <span class="nb">export </span><span class="nv">USER</span><span class="o">=</span><span class="s2">"francisco"</span> <span class="o">&amp;&amp;</span> <span class="nb">export</span> …  14B
+c1a9701b7132   24 minutes ago   /bin/sh <span class="nt">-c</span> apk add curl                         3.1MB
+c44f6da443d7   24 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop) WORKDIR /                     0B</span>
+389fef711851   6 days ago       /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  CMD ["/bin/sh"]              0B</span>
+&lt;missing&gt;      6 days ago       /bin/sh <span class="nt">-c</span> <span class="c">#(nop) ADD file:ec475c2abb2d46435…   5.58MB</span>
+</code></pre></div></div>
+
+<p>É… também não deu certo. :(</p>
+
+<h3 id="código-04-usando-args">Código 04: Usando ARGS</h3>
+
+<p>Conhecemos o atributo <em>ARGS</em>, ‘similar’ a <em>ENV</em>, e percebemos que podemos ganhar uma mobilidade ao passar as credenciais de acesso no comando de execução do <em>build</em> da imagem (não ter as credenciais escritas no <em>Dockerfile</em>!)</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>FROM alpine
+ARG <span class="nv">USER</span><span class="o">=</span>fake
+ARG <span class="nv">PASSWORD</span><span class="o">=</span>fake
+WORKDIR /
+RUN apk add curl
+RUN curl <span class="nt">-u</span> <span class="nv">$USER</span>:<span class="nv">$PASSWORD</span> <span class="nt">-o</span> app.jar <span class="s2">"https://artefatos.empresa.com.br/app-1.2.3.jar"</span>
+ENTRYPOINT <span class="o">[</span><span class="s2">"java"</span>, <span class="s2">"-XX:+UnlockExperimentalVMOptions"</span>, <span class="s2">"-Djava.security.egd=file:/dev/./urandom"</span>,<span class="s2">"-jar"</span>,<span class="s2">"app.jar"</span><span class="o">]</span>
+</code></pre></div></div>
+
+<p>E o comando para <em>buildar</em> a imagem seria:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>docker build <span class="nt">--build-arg</span> <span class="nv">USER</span><span class="o">=</span>francisco <span class="nt">--build-arg</span> <span class="nv">PASSWORD</span><span class="o">=</span>abc123 <span class="nt">-t</span> app:04 <span class="nb">.</span>
+</code></pre></div></div>
+
+<p>Contudo, ao analisar a imagem com o <code class="language-plaintext highlighter-rouge">docker image history</code>:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>IMAGE          CREATED         CREATED BY                                      SIZE      COMMENT
+e9956a610c1f   5 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  ENTRYPOINT ["java" "-XX:+…   0B</span>
+4bcdfdea08f9   5 minutes ago   |2 <span class="nv">PASSWORD</span><span class="o">=</span>abc123 <span class="nv">USER</span><span class="o">=</span>francisco /bin/sh <span class="nt">-c</span>…   14B
+1f56fb7ca086   5 minutes ago   |2 <span class="nv">PASSWORD</span><span class="o">=</span>abc123 <span class="nv">USER</span><span class="o">=</span>francisco /bin/sh <span class="nt">-c</span>…   3.1MB
+0ccf29f3aadf   5 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop) WORKDIR /                     0B</span>
+556f62d21750   5 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  ARG PASSWORD=fake            0B</span>
+a726e9660660   5 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  ARG USER=fake                0B</span>
+389fef711851   6 days ago      /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  CMD ["/bin/sh"]              0B</span>
+&lt;missing&gt;      6 days ago      /bin/sh <span class="nt">-c</span> <span class="c">#(nop) ADD file:ec475c2abb2d46435…   5.58MB</span>
+</code></pre></div></div>
+
+<p>Se olharmos a documentação <a href="https://docs.docker.com/engine/reference/builder/#arg">neste link</a>, perceberemos que aconteceu exatamente como o descrito: credenciais ainda visíveis.</p>
+
+<h3 id="código-05-adicionando-script-auxiliar">Código 05: Adicionando Script auxiliar</h3>
+
+<p>Podemos tentar fazer um <code class="language-plaintext highlighter-rouge">workaround</code>: utilizar um script intermediário para auxiliar no download do artefato, atrás de uma URL autenticada. Nosso projeto agora ficaria com os seguintes arquivos:</p>
+
+<ul>
+  <li>Dockerfile</li>
+  <li>build.sh</li>
+</ul>
+
+<p>Conteúdo do <em>build.sh</em>:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">#!/bin/sh</span>
+curl <span class="nt">-u</span> francisco:abc123 <span class="nt">-o</span> app.jar <span class="s2">"https://artefatos.empresa.com.br/app-1.2.3.jar"</span>
+</code></pre></div></div>
+
+<p>E o <em>Dockerfile</em>, faz uso do artefato já baixado:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>FROM alpine
+WORKDIR /
+COPY app.jar /
+ENTRYPOINT <span class="o">[</span><span class="s2">"java"</span>, <span class="s2">"-XX:+UnlockExperimentalVMOptions"</span>, <span class="s2">"-Djava.security.egd=file:/dev/./urandom"</span>,<span class="s2">"-jar"</span>,<span class="s2">"app.jar"</span><span class="o">]</span>
+</code></pre></div></div>
+
+<p>A sequência de ações seria:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>chmod +x build.sh
+./build.sh
+docker build -t app:05 .
+</code></pre></div></div>
+
+<p>Percebe-se claramente ao inspecionar a imagem que não há credenciais de acesso nela, confere? Coube a um script auxiliar realizar a autenticação (utilizando as credenciais de acesso), baixar o artefato e apresentá-lo ao contexto do build da imagem.</p>
+
+<p>It works!</p>
+
+<h3 id="código-06-multi-stage-builds">Código 06: multi-stage builds</h3>
+
+<p>Apesar do exemplo anterior ter cumprido seu propósito (imagem docker sem exposição de credenciais sensíveis), tive a sensação (e espero que você também) de que algo ficou estranho: Tivemos que recorrer a arquivos auxiliares, fora do escopo do Docker para resolver o problema.</p>
+
+<p>Se analisarmos um pouco, basicamente o que fizemos foi dividir o processo de build em 2 estágios:</p>
+
+<ul>
+  <li>estágio 01 que baixou os artefatos sob credenciais (script auxiliar)</li>
+  <li>estágio 02 que compilou a imagem (Docker)</li>
+</ul>
+
+<p>Lendo mais a documentação da Docker, percebemos que podemos fazer similar utilizando o conceito de <a href="https://docs.docker.com/develop/develop-images/multistage-build/">multi-stage builds</a>.</p>
+
+<p>Nosso Dockerfile:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>FROM alpine AS download
+ARG USER
+ARG PASSWORD
+RUN apk add curl
+RUN curl <span class="nt">-u</span> <span class="nv">$USER</span>:<span class="nv">$PASSWORD</span> <span class="nt">-o</span> /app.jar <span class="s2">"https://artefatos.empresa.com.br/app-1.2.3.jar"</span>
+
+FROM alpine
+WORKDIR /
+COPY <span class="nt">--from</span><span class="o">=</span>download /app.jar <span class="nb">.</span>
+ENTRYPOINT <span class="o">[</span><span class="s2">"java"</span>, <span class="s2">"-XX:+UnlockExperimentalVMOptions"</span>, <span class="s2">"-Djava.security.egd=file:/dev/./urandom"</span>,<span class="s2">"-jar"</span>,<span class="s2">"app.jar"</span><span class="o">]</span>
+</code></pre></div></div>
+
+<p>Perceba que fizemos exatamente a mesma coisa, agora usando apenas o Docker: Dividimos nosso build em <em>2 estágios</em>.</p>
+
+<ul>
+  <li>no primeiro estágio, uma imagem intermediária é criada (e suas respectivas layers e informações) com o download da aplicação, atrás da autenticação.</li>
+  <li>no segundo estágio, a imagem em construção (a oficial) copia apenas o <code class="language-plaintext highlighter-rouge">app.jar</code> da imagem anterior.</li>
+</ul>
+
+<p>Fácil perceber que, na imagem final não visualizaremos as credenciais. Além disso, a imagem intermediária é destruída ao final do processo de build.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>IMAGE          CREATED         CREATED BY                                      SIZE      COMMENT
+72ef8382df33   3 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  ENTRYPOINT ["java" "-XX:+…   0B</span>
+32a3816fdcd3   3 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop) COPY file:297d62e63eaf8490…   14B</span>
+29385377e66f   3 minutes ago   /bin/sh <span class="nt">-c</span> <span class="c">#(nop) WORKDIR /                     0B</span>
+389fef711851   6 days ago      /bin/sh <span class="nt">-c</span> <span class="c">#(nop)  CMD ["/bin/sh"]              0B</span>
+&lt;missing&gt;      6 days ago      /bin/sh <span class="nt">-c</span> <span class="c">#(nop) ADD file:ec475c2abb2d46435…   5.58MB</span>
+</code></pre></div></div>
+
+<p>Funciona! E parece-nos uma solução bem inteligente, não acha?</p>
+
+<h3 id="plus-buildkit">PLUS: BuildKit</h3>
+
+<p>Uma funcionalidade “nova” no Docker é o uso do <em>BuildKit</em> para ajudar no manuseio de credenciais durante o processo de construção de imagens.</p>
+
+<p>Ainda não brinquei com este recurso, assim tentarei em breve atualizar este post com um exemplo adicional.</p>
+
+<p>Caso deseje ver como funciona, <a href="https://docs.docker.com/develop/develop-images/build_enhancements/">não deixe de ler a documentação oficial</a></p>
+
+
+  </div><div id="disqus_thread" style="margin-top:25px"></div>
+  <script>
+    var disqus_config = function () {
+      this.page.url = 'http://0.0.0.0:4000/posts/06-exemplos-uso-credenciais-build-docker-images/';
+      this.page.identifier = 'http://0.0.0.0:4000/posts/06-exemplos-uso-credenciais-build-docker-images/';
+    };
+    (function () {
+      var d = document, s = d.createElement('script');
+      s.src = 'https://matheuslao.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments
+      powered by Disqus.</a></noscript></div>
+
+    </section>
+    <footer class="">
+      <ul class="social about-footer "><a href="https://github.com/matheuslao" target="_blank">
+          <li>
+            <i class="icon-github-circled"></i>
+          </li>
+        </a><a href="https://www.linkedin.com/in/matheuslao" target="_blank">
+          <li>
+            <i class="icon-linkedin-squared"></i>
+          </li>
+        </a><a href="https://twitter.com/matheuslao" target="_blank">
+          <li>
+            <i class="icon-twitter-squared"></i>
+          </li>
+        </a><a href="https://instagram.com/matheuslao" target="_blank">
+          <li>
+            <i class="icon-instagram"></i>
+          </li>
+        </a><a href=" https://t.me/matheuslao" target="_blank">
+          <li>
+            <i class="icon-telegram"></i>
+          </li>
+        </a></ul><nav class="navigation about-footer ">
+        <ul>
+          
+        </ul>
+      </nav><p class="about-footer ">&copy;
+        2024</p><div class="about-footer ">
+        <p>Dark Mode
+          <i class="icon-moon"></i>
+          <label class="switch">
+            <input type="checkbox" class="dark-mode-toggle">
+            <span class="slider round" onclick="toggleDarkMode()"></span>
+          </label>
+        </p>
+      </div>
+    </footer>
+  </main>
+  
+  <script type="text/javascript" src="/assets/js/darkmode.js"></script>
+  
+  <script src="/assets/js/simple-jekyll-search.min.js"></script>
+  <script src="/assets/js/search.js"></script>
+  
+</body>
+
+</html>
