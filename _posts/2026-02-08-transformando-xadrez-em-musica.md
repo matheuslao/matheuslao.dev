@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "A Sinfonida do Tabuleiro: Transformando Xadrez em Música"
+title: "A Sinfonia do Tabuleiro: Transformando Xadrez em Música"
 date: 2026-02-08T13:00:10-03:00
 tags:
   - chess
@@ -9,17 +9,17 @@ tags:
   - música
 ---
 
-Olá!
-
-> Este post também foi publicado no [Ô Rei - Clube de Xadrez](https://oreiclubedexadrez.com/20260211-sinfonia-do-tabuleiro/).
-
 Nós enxadristas passamos horas analisando posições, decorando aberturas e calculando finais. Mas vocês já pararam para pensar em qual é o som de uma partida de xadrez? E não estou falando do barulho das peças batendo no tabuleiro ou do relógio sendo pressionado. 
+
+**Ah! Que legal:** Este post também foi publicado no [Ô Rei - Clube de Xadrez](https://oreiclubedexadrez.com/20260211-sinfonia-do-tabuleiro/).
 
 Recentemente, navegando pelo GitHub (o paraíso dos programadores), encontrei um projeto open-source chamado **ChessWAV** que faz exatamente isso: ele transforma a notação das nossas jogadas em notas musicais reais:
 
 [GitHub - leandronsp/chesswav: Transform chess games into audio. Each move becomes a note.](https://github.com/leandronsp/chesswav)
 
-![imagem de tabuleiro de xadrez soando novas musicais](https://i.ibb.co/fd3dWQnP/Chess-Audio-Transformation.png)
+| ![imagem de tabuleiro de xadrez soando novas musicais](https://i.ibb.co/fd3dWQnP/Chess-Audio-Transformation.png)
+| :--: |
+| Fonte: Imagem gerada pela IA |
 
 
 # O Conceito: Como o Xadrez vira Música?
