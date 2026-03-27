@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "O Piano que Carrego"
-date: 2026-03-24T13:00:10-03:00
+date: 2026-03-27T03:00:10-03:00
 ---
 
 
